@@ -13,6 +13,12 @@ import quantities as pq
 import collections
 from scipy import optimize
 from PyAstronomy import pyasl
+import argparse
+
+parser = argparse.ArgumentParser(description="Fit G2's orbit.")
+parser.add_argument('--samerp',           dest='samerp',    help='G2 and S35 forced to have same rp', default=False, action='store_true')
+parser.add_argument('--samew',            dest='samew',     help='G2 and S35 forced to have same w',  default=False, action='store_true')
+args = parser.parse_args()
 
 def neg_obj_func(x, ptimes, vtimes):
 	return -obj_func(x, ptimes, vtimes)
@@ -62,13 +68,13 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 
 	if nobjects >= 3:
 		# Hacky, third object has restricted parameters depending on object 2.
-		if samerp:
-			if samew:
+		if args.samerp:
+			if args.samew:
 				elements[2] = [elements[2][0],0.,0.,0.,0.,0.]
 			else:
 				elements[2] = [elements[2][0],0.,0.,0.,elements[2][1],0.]
 		else:
-			if samew:
+			if args.samew:
 				elements[2] = [elements[2][0],elements[2][1],0.,0.,0.,0.]
 			else:
 				# For floating w
@@ -88,7 +94,7 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 		a2 = elements[2][0]
 		period2 = 2.*np.pi*np.sqrt(a2**3/(G*mh))
 		if a1 > a2: return float("-inf")
-		if samerp:
+		if args.samerp:
 			# G2 and S35 have same Rp.
 			elements[2][1] = elements[1][1] + np.log10(a1/a2)
 		else:
@@ -100,11 +106,11 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 		#elements[2][3] = elements[1][3]*period1/period2
 		elements[2][3] = np.mod(g2reftime - np.mod(g2reftime - elements[1][3]*period1, period1), period2)/period2
 		#elements[2][3] = (1. - (1.-elements[1][3])*period1/period2)
-		if samew:
+		if args.samew:
 			elements[2][4] = elements[1][4]
-		else:
-			# Retrograde precession only, GR won't be important
-			if elements[2][4] > elements[1][4]: return float("-inf")
+		#else:
+		#	# Retrograde precession only, GR won't be important
+		#	if elements[2][4] > elements[1][4]: return float("-inf")
 		elements[2][5] = elements[1][5]
 
 	# Skip obj func calculation in this mode
@@ -124,8 +130,8 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 			posvec = kes[gi].xyzPos(stimes)
 			dat = posvec[:,:2]
 
-			dat[:,0] += 2.*mhz*np.tan(mhx[ci]*np.pi/3600./180./2.) + mhvx[ci]*km*stimes
-			dat[:,1] += 2.*mhz*np.tan(mhy[ci]*np.pi/3600./180./2.) + mhvy[ci]*km*stimes
+			dat[:,0] += 2.*mhz*np.tan(mhx[ci]*iasec) + mhvx[ci]*km*stimes
+			dat[:,1] += 2.*mhz*np.tan(mhy[ci]*iasec) + mhvy[ci]*km*stimes
 
 			if save: vecs[i] = np.copy(dat)
 
@@ -160,8 +166,8 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 			dat[:,0] += mhvx[ci]*km
 			dat[:,1] += mhvy[ci]*km
 			if save: vecs[i] = np.copy(dat)
-			val += np.sum(((dat[:,0] - measurements[i][:,0]*mhz)/errors[i][:,0])**2)
-			val += np.sum(((dat[:,1] - measurements[i][:,1]*mhz)/errors[i][:,1])**2)
+			val += np.sum(((dat[:,0] - measurements[i][:,0]*mhz)/(errors[i][:,0]*mhz))**2)
+			val += np.sum(((dat[:,1] - measurements[i][:,1]*mhz)/(errors[i][:,1]*mhz))**2)
 		else:
 			print 'Error, invalid type'
 			sys.exit(0)
@@ -176,13 +182,11 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 global temp, elements, vecs, vecs2
 
 # Some options to toggle
-samerp = True
-samew = False
 rpmax = 1.e300
 
 # User adjustable parameters
-nwalkers = 128
-nsteps = 50
+nwalkers = 1024
+nsteps = 10000
 nburn = nsteps/2
 t0 = 1.e4
 
@@ -195,8 +199,12 @@ au = pq.au.simplified.magnitude
 yr = pq.year.simplified.magnitude
 kpc = 1.e3*pc
 mpc = 1.e-3*pc
+impc = 1./mpc
 km = 1.e5
+ikm = 1./km
 msun = 1.9891e33
+asec = 2.*3600.*180./np.pi
+iasec = 1./asec
 
 temp = t0
 
@@ -217,20 +225,19 @@ g2data2 = np.loadtxt(cd+"/NTT/G2.points")
 g2vdata = np.loadtxt(cd+"/Keck/G2.rv")
 g2vdata2 = np.loadtxt(cd+"/VLT/G2.rv")
 #g2vdata2 = np.loadtxt(cd+"/VLT/G2-half.rv")
-s35data = np.loadtxt(cd+"/NTT/S35.points")
-s35vxydata = np.loadtxt(cd+"/NTT/S35.vxy")
-# VERY IMPORTANT: 2000.41 EPOCH ERRORS MADE LARGER
-#s35data = np.loadtxt(cd+"/NTT/S35.points.two")
-#s35vxydata = np.loadtxt(cd+"/NTT/S35.vxy.two")
+s35data = np.loadtxt(cd+"/VLT/S35.points")
+s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy")
+#s35data = np.loadtxt(cd+"/VLT/S35.points.two")
+#s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy.two")
 
 # Convert data units
 s2data[:,0] = s2data[:,0]*yr
 s2data[:,1] = -s2data[:,1] #Sign needs to be flipped according to Leo's e-mail
-s2data[:,1:] = 2.*np.tan(s2data[:,1:]*np.pi/3600./180./2.)
+s2data[:,1:] = 2.*np.tan(s2data[:,1:]*iasec)
 
 s2data2[:,0] = s2data2[:,0]*yr
 s2data2[:,1:] = 0.001*s2data2[:,1:] #Sign does NOT need to be flipped
-s2data2[:,1:] = 2.*np.tan(s2data2[:,1:]*np.pi/3600./180./2.)
+s2data2[:,1:] = 2.*np.tan(s2data2[:,1:]*iasec)
 
 s2vdata[:,0] = s2vdata[:,0]*yr
 s2vdata[:,1] = -s2vdata[:,1] #Positive radial velocity indicates recession (negative v_z)
@@ -243,14 +250,14 @@ s2vdata2[:,1:] = s2vdata2[:,1:]*km
 g2data[:,0] = g2data[:,0]*yr
 g2data[:,1] = -g2data[:,1] #Sign needs to be flipped according to Leo's e-mail
 #g2data[:,2] = g2data[:,2] + 0.01 #Just testing some extra error in G2's position
-g2data[:,1:] = 2.*np.tan(g2data[:,1:]*np.pi/3600./180./2.)
+g2data[:,1:] = 2.*np.tan(g2data[:,1:]*iasec)
 
 # Adding some positional uncertainty to G2
 #g2data[:,3:5] = g2data[:,3:5] + 200.*au/(8.3*kpc)
 
 g2data2[:,0] = g2data2[:,0]*yr
 g2data2[:,1] = -g2data2[:,1] #Sign needs to be flipped according to Leo's e-mail
-g2data2[:,1:] = 2.*np.tan(g2data2[:,1:]*np.pi/3600./180./2.)
+g2data2[:,1:] = 2.*np.tan(g2data2[:,1:]*iasec)
 
 # Adding some positional uncertainty to G2
 #g2data2[:,3:5] = g2data2[:,3:5] + 200.*au/(8.3*kpc)
@@ -272,7 +279,7 @@ g2vdata2[:,1:] = g2vdata2[:,1:]*km
 # From Schodel 2009
 s35data = np.reshape(s35data, (-1, 5))
 s35data[:,0] = s35data[:,0]*yr
-s35data[:,1:] = 2.*np.tan(s35data[:,1:]*np.pi/3600./180./2.)
+s35data[:,1:] = 2.*np.tan(s35data[:,1:]*iasec)
 s35vxydata = np.reshape(s35vxydata, (-1, 5))
 s35vxydata[:,0] = s35vxydata[:,0]*yr
 s35vxydata[:,1:] = s35vxydata[:,1:]*km
@@ -336,23 +343,23 @@ s35vxydata[:,1:] = s35vxydata[:,1:]/(8.*kpc)
 #kind = [0,0,1]
 #names = ['S2','G2','S35']
 # Just Genzel S2 + G2 + S35, minus S35 velocity
-times = np.array([s2data2[:,0],g2data2[:,0],s35data[:,0],s2vdata2[:,0],g2vdata2[:,0]])
-types = ['pxy','pxy','pxy','vz','vz']
-measurements = [s2data2[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata2[:,1:2],g2vdata2[:,1:2]]
-errors = [s2data2[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata2[:,2:3],g2vdata2[:,2:3]]
-objects = [0,1,2,0,1]
-coords = [0,0,0,0,0]
-kind = [0,0,1]
-names = ['S2','G2','S35']
-# Genzel S2 + S35 + G2 (position only)
-#times = np.array([s2data2[:,0],g2data2[:,0],s35data[:,0],s2vdata2[:,0],s35vxydata[:,0]])
-#types = ['pxy','pxy','pxy','vz','vxy']
-#measurements = [s2data2[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata2[:,1:2],s35vxydata[:,1:3]]
-#errors = [s2data2[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata2[:,2:3],s35vxydata[:,3:5]]
-#objects = [0,1,2,0,2]
+#times = np.array([s2data2[:,0],g2data2[:,0],s35data[:,0],s2vdata2[:,0],g2vdata2[:,0]])
+#types = ['pxy','pxy','pxy','vz','vz']
+#measurements = [s2data2[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata2[:,1:2],g2vdata2[:,1:2]]
+#errors = [s2data2[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata2[:,2:3],g2vdata2[:,2:3]]
+#objects = [0,1,2,0,1]
 #coords = [0,0,0,0,0]
 #kind = [0,0,1]
 #names = ['S2','G2','S35']
+# Genzel S2 + S35 + G2 (position only)
+times = np.array([s2data2[:,0],g2data2[:,0],s35data[:,0],s2vdata2[:,0],s35vxydata[:,0]])
+types = ['pxy','pxy','pxy','vz','vxy']
+measurements = [s2data2[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata2[:,1:2],s35vxydata[:,1:3]]
+errors = [s2data2[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata2[:,2:3],s35vxydata[:,3:5]]
+objects = [0,1,2,0,2]
+coords = [0,0,0,0,0]
+kind = [0,0,1]
+names = ['S2','G2','S35']
 
 zerot = min(list(flatten(times)))
 datalen = len(list(flatten(times)))
@@ -467,24 +474,24 @@ ncoords = len(set(coords))
 #						   0.04*pc,1.0], size=nwalkers)
 
 # Three objects with initial decent guess, rp allowed to float, w allowed to float, no unused free parameters, includes variable variance
-#x0 = em.utils.sample_ball([39.9595606861, 1.e+15, 0.00336573644595, 0.00189323680646, -4.44312540168, -1.71856390183, 32.0694144443, 2.64426936195e+22,
-#						   1.576992696e+16, -0.907088055947, 225.398067805, 0.631748105165, 63.0430664828, 44.6995421214,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 297.5153721,
-#						   0.04*pc,-2.0, 2.76476139e+02],
-#				  		  [0.1,1.0e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.04*pc,1.0,3.6], size=nwalkers)
-
-# Three objects with initial decent guess, rp fixed, w allowed to float, no unused free parameters, includes variable variance
 x0 = em.utils.sample_ball([39.9377048586, 6.03764200817e+14, 0.00259229857886, 0.00202617827851, -3.19123397664, -5.26122862936, -12.1680808296, 2.56181937951e+22,
 						   1.55372337623e+16, -0.922512660801, 43.9219041718, 0.629817298992, 244.320447563, 45.0406570285,
 						   1.03433664987e+17, -1.78166243609, 188.411516325, 0.0785951978784, 285.378895166, 62.9907152784,
-						   0.04*pc,2.76476139e+02],
+						   0.04*pc,-2.,2.76476139e+02],
 				  		  [0.1,1.0e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
 						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-						   0.0004*pc,0.1,36.,0.1,36.,36.,
-						   0.04*pc,36.], size=nwalkers)
+						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+						   0.04*pc,1.0,3.6], size=nwalkers)
+
+# Three objects with initial decent guess, rp fixed, w allowed to float, no unused free parameters, includes variable variance
+#x0 = em.utils.sample_ball([39.9377048586, 6.03764200817e+14, 0.00259229857886, 0.00202617827851, -3.19123397664, -5.26122862936, -12.1680808296, 2.56181937951e+22,
+#						   1.55372337623e+16, -0.922512660801, 43.9219041718, 0.629817298992, 244.320447563, 45.0406570285,
+#						   1.03433664987e+17, -1.78166243609, 188.411516325, 0.0785951978784, 285.378895166, 62.9907152784,
+#						   0.04*pc,2.76476139e+02],
+#				  		  [0.1,1.0e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
+#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.0004*pc,0.1,36.,0.1,36.,36.,
+#						   0.04*pc,36.], size=nwalkers)
 
 # Forced high eccentricity
 #x0 = em.utils.sample_ball([3.99298621e+01, 4.50478826e-03, -1.28610303e-02, -5.16967075e+00, 2.64503308e+01, 2.78545427e+00, 2.41850038e+22,
@@ -628,11 +635,11 @@ if pool.is_master():
 	kes = get_star_ke(elements, lmh)
 	for i, e in enumerate(elements):
 		orbtimes[i] = np.arange(0., 1. + dp, dp)*periods[i] + taus[i]*periods[i]
-		orbpos[i] = kes[i].xyzPos(orbtimes[i])/mpc
+		orbpos[i] = kes[i].xyzPos(orbtimes[i])*impc
 		orbtimes[i] = (perits[i] + orbtimes[i] - taus[i]*periods[i])/yr
 
 		orbtimes2[i] = np.arange(0., 4. + dp, dp)*periods[i] + taus[i]*periods[i]
-		orbvel[i] = -kes[i].xyzVel(orbtimes2[i])/km
+		orbvel[i] = -kes[i].xyzVel(orbtimes2[i])*ikm
 		orbtimes2[i] = (perits[i] + orbtimes2[i] - taus[i]*periods[i])/yr
 
 	posx = [[] for _ in xrange(nobjects)]
@@ -645,18 +652,18 @@ if pool.is_master():
 		gi = objects[t]
 		ci = coords[t]
 		if types[t] == 'pxy':
-			posx[gi].extend((vecs[t][:,0] - 2.*mhz*np.tan(mhx[ci]*np.pi/3600./180./2.) - mhvx[ci]*km*stimes)/mpc)
-			posy[gi].extend((vecs[t][:,1] - 2.*mhz*np.tan(mhy[ci]*np.pi/3600./180./2.) - mhvy[ci]*km*stimes)/mpc)
+			posx[gi].extend((vecs[t][:,0] - 2.*mhz*np.tan(mhx[ci]*iasec) - mhvx[ci]*km*stimes)*impc)
+			posy[gi].extend((vecs[t][:,1] - 2.*mhz*np.tan(mhy[ci]*iasec) - mhvy[ci]*km*stimes)*impc)
 			#if (gi == 1):
-			#	posx[2].extend(vecs2[t][:,0]/mpc)
-			#	posy[2].extend(vecs2[t][:,1]/mpc)
+			#	posx[2].extend(vecs2[t][:,0]*impc)
+			#	posy[2].extend(vecs2[t][:,1]*impc)
 		elif types[t] =='vxy':
 			pltt[gi].extend((zerot + stimes)/yr)
-			velx[gi].extend(vecs[t][:,0]/km - mhvx[ci])
-			vely[gi].extend(vecs[t][:,1]/km - mhvy[ci])
+			velx[gi].extend(vecs[t][:,0]*ikm - mhvx[ci])
+			vely[gi].extend(vecs[t][:,1]*ikm - mhvy[ci])
 		elif types[t] =='vz':
 			pltt[gi].extend((zerot + stimes)/yr)
-			velz[gi].extend(-(vecs[t]/km - mhvz[ci])) # Flip sign back to match convention
+			velz[gi].extend(-(vecs[t]*ikm - mhvz[ci])) # Flip sign back to match convention
 
 	#Now do ensemble stuff
 	print 'Assembling ensemble'
@@ -667,7 +674,7 @@ if pool.is_master():
 		lmh = pos[w,0]
 		kes = get_star_ke(elements, lmh)
 		for i, e in enumerate(elements):
-			ensemblevels[w,i,:,:] = -kes[i].xyzVel(ensembletimes*yr - zerot)/km
+			ensemblevels[w,i,:,:] = -kes[i].xyzVel(ensembletimes*yr - zerot)*ikm
 
 	velzminvec = np.zeros(shape=(nobjects,len(ensembletimes)))
 	velzmaxvec = np.zeros(shape=(nobjects,len(ensembletimes)))
@@ -701,7 +708,6 @@ if pool.is_master():
 			#pltt = [xx for (yy,xx) in sorted(zip(pltt,pltt))]
 			velzplt.plot(pltt[g], velz[g], gcolors[g]+'o')
 
-		a = elements[g][0]
 		velzplt.plot(orbtimes2[g], orbvel[g][:,2], gcolors[g]+'-')
 		#np.set_printoptions(threshold='nan')
 		#print orbtimes[i], orbvel[g][:,2]
@@ -737,27 +743,27 @@ if pool.is_master():
 		nam = names[obj]
 
 		if typ == 'pxy':
-			x = (mhz*mea[:,0] - 2.*mhz*np.tan(mhx[coo]*np.pi/3600./180./2.) - mhvx[coo]*km*tim)/mpc
-			y = (mhz*mea[:,1] - 2.*mhz*np.tan(mhy[coo]*np.pi/3600./180./2.) - mhvy[coo]*km*tim)/mpc
+			x = (mhz*mea[:,0] - 2.*mhz*np.tan(mhx[coo]*iasec) - mhvx[coo]*km*tim)*impc
+			y = (mhz*mea[:,1] - 2.*mhz*np.tan(mhy[coo]*iasec) - mhvy[coo]*km*tim)*impc
 			if obj == 1:
-				u = np.sqrt((mhz*err[:,0])**2 + variance**2)/mpc
-				v = np.sqrt((mhz*err[:,1])**2 + variance**2)/mpc
+				u = np.sqrt((mhz*err[:,0])**2 + variance**2)*impc
+				v = np.sqrt((mhz*err[:,1])**2 + variance**2)*impc
 			else:
-				u = mhz*err[:,0]/mpc
-				v = mhz*err[:,1]/mpc
+				u = mhz*err[:,0]*impc
+				v = mhz*err[:,1]*impc
 
 			posplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		elif typ == 'vz':
-			y = -(mea[:,0]/km - mhvx[coo]) # Flip sign back to match convention
-			v = err[:,0]/km - mhvy[coo]
+			y = -(mea[:,0]*ikm - mhvz[coo]) # Flip sign back to match convention
+			v = err[:,0]*ikm
 
 			velzplt.errorbar(tim/yr, y, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		elif typ == 'vxy':
 			#pass
-			x = mhz*meas[:,0]/km - mhvx[coo]
-			y = mhz*meas[:,1]/km - mhvy[coo]
-			u = err[:,0]/km
-			v = err[:,1]/km
+			x = mhz*mea[:,0]*ikm - mhvx[coo]
+			y = mhz*mea[:,1]*ikm - mhvy[coo]
+			u = mhz*err[:,0]*ikm
+			v = mhz*err[:,1]*ikm
 
 			velxyplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		else:
