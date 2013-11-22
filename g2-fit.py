@@ -16,8 +16,10 @@ from PyAstronomy import pyasl
 import argparse
 
 parser = argparse.ArgumentParser(description="Fit G2's orbit.")
-parser.add_argument('--samerp',           dest='samerp',    help='G2 and S35 forced to have same rp', default=False, action='store_true')
-parser.add_argument('--samew',            dest='samew',     help='G2 and S35 forced to have same w',  default=False, action='store_true')
+parser.add_argument('--samerp',           dest='samerp',    help='G2 and S35 forced to have same rp', 					default=False, action='store_true')
+parser.add_argument('--samew',            dest='samew',     help='G2 and S35 forced to have same w',  					default=False, action='store_true')
+parser.add_argument('--noproprec',        dest='noproprec', help='S35 not allowed to precess prograde relative to G2',  default=False, action='store_true')
+parser.add_argument('--prior',            dest='prior',     help='Use prior for Sgr A* properties',                     default=False, action='store_true')
 args = parser.parse_args()
 
 def neg_obj_func(x, ptimes, vtimes):
@@ -51,19 +53,30 @@ def get_star_ke(elements, lmh):
 def chunks(l, n):
 	return np.array([l[i:i+n] for i in range(0, len(l), n)])
 
-def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode, save):
-	global vecs, vecs2, temp, elements
-	lmh = x[0]
-	variance = x[1]
-	if (variance < 0.): return float("-inf")
-	ncoords = len(set(coords))
-	mhx = x[2:5*ncoords+2:5]
-	mhy = x[3:5*ncoords+2:5]
-	mhvx = x[4:5*ncoords+2:5]
-	mhvy = x[5:5*ncoords+2:5]
-	mhvz = x[6:5*ncoords+2:5]
-	mhz = x[5*ncoords+2]
-	elements = chunks(x[5*ncoords+3:], 6)
+def obj_func(x, times, types, measurements, errors, objects, coords, varia, prior, mode, save):
+	global vecs, vecs2, temp, elements, variances, mhx, mhy, mhz, mhvx, mhvy, mhvz, lmh
+	lmh =  x[0]
+	mhz =  x[1]
+	variances = x[2:nvaria+2]
+	if min(variances) < 0: return float("-inf")
+	mhx =  x[nvaria+2:5*ncoords+nvaria+2:5]
+	mhy =  x[nvaria+3:5*ncoords+nvaria+2:5]
+	mhvx = x[nvaria+4:5*ncoords+nvaria+2:5]
+	mhvy = x[nvaria+5:5*ncoords+nvaria+2:5]
+	mhvz = x[nvaria+6:5*ncoords+nvaria+2:5]
+	elements = chunks(x[5*ncoords+nvaria+2:], 6)
+
+	#print lmh
+	#print mhz
+	#print variances
+	#print mhx
+	#print mhy
+	#print mhvx
+	#print mhvy
+	#print mhvz
+	#print elements
+	#sys.exit(0)
+
 	mh = 10.**lmh
 
 	if nobjects >= 3:
@@ -108,9 +121,9 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 		#elements[2][3] = (1. - (1.-elements[1][3])*period1/period2)
 		if args.samew:
 			elements[2][4] = elements[1][4]
-		#else:
-		#	# Retrograde precession only, GR won't be important
-		#	if elements[2][4] > elements[1][4]: return float("-inf")
+		elif args.noproprec:
+			# Retrograde precession only, GR won't be important
+			if elements[2][4] > elements[1][4]: return float("-inf")
 		elements[2][5] = elements[1][5]
 
 	# Skip obj func calculation in this mode
@@ -126,6 +139,7 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 	for i, stimes in enumerate(times):
 		ci = coords[i]
 		gi = objects[i]
+		vi = varia[i]
 		if types[i] == 'pxy':
 			posvec = kes[gi].xyzPos(stimes)
 			dat = posvec[:,:2]
@@ -139,33 +153,44 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 			#	velvec = kes[gi].xyzVel(stimes)
 			#	dists = np.array([np.linalg.norm(x) for x in posvec])
 			#	velvec = np.array([np.array(x/np.linalg.norm(x)) for x in velvec])
-			#	offset = 0.3*velvec*np.transpose(np.tile(dists,(3,1)))
-			#	dat[:,0] += offset[:,0]
-			#	dat[:,1] += offset[:,1]
+			#	nvaria = 0.3*velvec*np.transpose(np.tile(dists,(3,1)))
+			#	dat[:,0] += nvaria[:,0]
+			#	dat[:,1] += nvaria[:,1]
 			#	vecs2[i] = np.copy(dat)
 
 			#val += np.sum((((dat[:,0] - measurements[i][:,0]*mhz)/(errors[i][:,0]*mhz)))**2)
 			#val += np.sum((((dat[:,1] - measurements[i][:,1]*mhz)/(errors[i][:,1]*mhz)))**2)
 			# For max likelihood
-			if (gi == 1):
-				val += np.sum((dat[:,0] - measurements[i][:,0]*mhz)**2/((errors[i][:,0]*mhz)**2 + variance**2))
-				val += np.sum((dat[:,1] - measurements[i][:,1]*mhz)**2/((errors[i][:,1]*mhz)**2 + variance**2))
-				if mode == 1:
-					val += 2.*np.sum(np.log(np.sqrt((errors[i][:,0]*mhz)**2 + variance**2)))
-					val += 2.*np.sum(np.log(np.sqrt((errors[i][:,1]*mhz)**2 + variance**2)))
+
+			if vi != -1:
+				variancepxy2 = variances[vi]**2
 			else:
-				val += np.sum((((dat[:,0] - measurements[i][:,0]*mhz)/(errors[i][:,0]*mhz)))**2)
-				val += np.sum((((dat[:,1] - measurements[i][:,1]*mhz)/(errors[i][:,1]*mhz)))**2)
+				variancepxy2 = 0.
+
+			val += np.sum((dat[:,0]/mhz - measurements[i][:,0])**2/(errors[i][:,0]**2 + variancepxy2))
+			val += np.sum((dat[:,1]/mhz - measurements[i][:,1])**2/(errors[i][:,1]**2 + variancepxy2))
+			if mode == 1:
+				val += 0.5*np.sum(np.log(errors[i][:,0]**2 + variancepxy2))
+				val += 0.5*np.sum(np.log(errors[i][:,1]**2 + variancepxy2))
 		elif types[i] == 'vz':
 			dat = kes[gi].xyzVel(stimes)[:,2:3]
 			dat += mhvz[ci]*km
 			if save: vecs[i] = np.copy(dat)
-			val += np.sum(((dat - measurements[i])/errors[i])**2)
+
+			if vi != -1:
+				variancevz2 = (variances[vi]*km)**2
+			else:
+				variancevz2 = 0.
+
+			val += np.sum((dat - measurements[i])**2/(errors[i]**2 + variancevz2))
+			if mode == 1:
+				val += 0.5*np.sum(np.log(errors[i]**2 + variancevz2))
 		elif types[i] == 'vxy':
 			dat = kes[gi].xyzVel(stimes)[:,0:2]
 			dat[:,0] += mhvx[ci]*km
 			dat[:,1] += mhvy[ci]*km
 			if save: vecs[i] = np.copy(dat)
+			#print 'vxy', np.sum(((dat[:,0] - measurements[i][:,0]*mhz)/(errors[i][:,0]*mhz))**2), np.sum(((dat[:,1] - measurements[i][:,1]*mhz)/(errors[i][:,1]*mhz))**2)
 			val += np.sum(((dat[:,0] - measurements[i][:,0]*mhz)/(errors[i][:,0]*mhz))**2)
 			val += np.sum(((dat[:,1] - measurements[i][:,1]*mhz)/(errors[i][:,1]*mhz))**2)
 		else:
@@ -173,20 +198,22 @@ def obj_func(x, times, types, measurements, errors, objects, coords, prior, mode
 			sys.exit(0)
 
 	if prior:
-		pval = -0.5*((mh - 4.31e6*msun)/(0.42e6*msun))**2 - 0.5*((mhz - 8.33*kpc)/(0.35*kpc))**2 - 0.5*(mhvz/5.)**2
+		pval = -0.5*((mh - 4.31e6*msun)/(0.42e6*msun))**2 - 0.5*((mhz - 8.33*kpc)/(0.35*kpc))**2
+		for ci in xrange(ncoords):
+			pval = pval - 0.5*(mhvz[ci]/5.)**2
 	else:
 		pval = 0.
 
 	return -0.5*val + pval#/temp
 
-global temp, elements, vecs, vecs2
+global temp, elements, vecs, vecs2, variances
 
 # Some options to toggle
 rpmax = 1.e300
 
 # User adjustable parameters
-nwalkers = 1024
-nsteps = 10000
+nwalkers = 512
+nsteps = 5000
 nburn = nsteps/2
 t0 = 1.e4
 
@@ -210,25 +237,29 @@ temp = t0
 
 zscale = 2.
 zstretch = ((zscale - 1.) + 1.)**2/zscale
+	
+nvaria = 2
 
 #cd = os.getcwd()
 cd = '/pfs/james/g2fit'
 
 # Load data files
-s2data = np.loadtxt(cd+"/Keck/S0-2.points")
-s2data2 = np.loadtxt(cd+"/NTT/S0-2.points")
-s2vdata = np.loadtxt(cd+"/Keck/S0-2.rv")
-s2vdata2 = np.loadtxt(cd+"/VLT/S0-2.rv")
+s2data = np.loadtxt(cd+"/Keck/S2.points")
+s2data2 = np.loadtxt(cd+"/NACO/S2.points")
+s2vdata = np.loadtxt(cd+"/Keck/S2.rv")
+s2vdata2 = np.loadtxt(cd+"/VLT/S2.rv")
 g2data = np.loadtxt(cd+"/Keck/G2.points")
-g2data2 = np.loadtxt(cd+"/NTT/G2.points")
+g2data2 = np.loadtxt(cd+"/VLT/G2.points")
 #g2data2 = np.loadtxt(cd+"/NTT/G2-half.points")
 g2vdata = np.loadtxt(cd+"/Keck/G2.rv")
 g2vdata2 = np.loadtxt(cd+"/VLT/G2.rv")
 #g2vdata2 = np.loadtxt(cd+"/VLT/G2-half.rv")
-s35data = np.loadtxt(cd+"/VLT/S35.points")
-s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy")
+#s35data = np.loadtxt(cd+"/VLT/S35.points")
+#s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy")
 #s35data = np.loadtxt(cd+"/VLT/S35.points.two")
 #s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy.two")
+s35data = np.loadtxt(cd+"/NACO/S35.points.gillessen")
+s35vxydata = np.loadtxt(cd+"/NACO/S35.vxy.gillessen")
 
 # Convert data units
 s2data[:,0] = s2data[:,0]*yr
@@ -277,23 +308,43 @@ g2vdata2[:,1:] = g2vdata2[:,1:]*km
 #g2vdata2[:,2] = g2vdata2[:,2] + 100*km
 
 # From Schodel 2009
+#s35data = np.reshape(s35data, (-1, 5))
+#s35data[:,0] = s35data[:,0]*yr
+#s35data[:,1:] = 2.*np.tan(s35data[:,1:]*iasec)
+#s35vxydata = np.reshape(s35vxydata, (-1, 5))
+#s35vxydata[:,0] = s35vxydata[:,0]*yr
+#s35vxydata[:,1:] = s35vxydata[:,1:]*km
+## From Schodel 2009, 8 kpc was assumed, divide by their distance and multiply back measured distance
+#s35vxydata[:,1:] = s35vxydata[:,1:]/(8.*kpc)
+
+# From Gillessen 2009
 s35data = np.reshape(s35data, (-1, 5))
 s35data[:,0] = s35data[:,0]*yr
 s35data[:,1:] = 2.*np.tan(s35data[:,1:]*iasec)
 s35vxydata = np.reshape(s35vxydata, (-1, 5))
 s35vxydata[:,0] = s35vxydata[:,0]*yr
-s35vxydata[:,1:] = s35vxydata[:,1:]*km
-# From Schodel 2009, 8 kpc was assumed, divide by their distance and multiply back measured distance
-s35vxydata[:,1:] = s35vxydata[:,1:]/(8.*kpc)
-
+s35vxydata[:,1:] = 2.*np.tan(s35vxydata[:,1:]*iasec)/yr
 
 # Both datasets
-#times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0]])
-#types = ['p','p','p','p','v','v','v','v']
-#measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],s2vdata[:,1:2],s2vdata2[:,0],g2vdata[:,1:2],g2vdata2[:,1:2]]
-#errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3]]
-#objects = [0,0,1,1,0,0,1,1]
-#coords = [0,1,0,1,0,1,0,1]
+times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s35data[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],s35vxydata[:,0]])
+types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy']
+measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],s35vxydata[:,1:3]]
+errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],s35vxydata[:,3:5]]
+objects = [0,0,1,1,2,0,0,1,1,2]
+coords = [0,1,0,1,1,0,1,0,1,1]
+kind = [0,0,1]
+names = ['S2','G2','S35']
+varia = [0,1,2,3,-1,-1,-1,4,5,-1]
+# Both datasets, minus Gillessen G2 position
+#times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],s35data[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],s35vxydata[:,0]])
+#types = ['pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy']
+#measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],s35data[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],s35vxydata[:,1:3]]
+#errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],s35data[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],s35vxydata[:,3:5]]
+#objects = [0,0,1,2,0,0,1,1,2]
+#coords = [0,1,0,1,0,1,0,1,1]
+#kind = [0,0,1]
+#names = ['S2','G2','S35']
+#varia = [0,1,2,-1,-1,-1,3,4,-1]
 # Ghez + Genzel S0-2 data
 #times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0]])
 #types = ['p','p','p','v','v','v']
@@ -352,26 +403,27 @@ s35vxydata[:,1:] = s35vxydata[:,1:]/(8.*kpc)
 #kind = [0,0,1]
 #names = ['S2','G2','S35']
 # Genzel S2 + S35 + G2 (position only)
-times = np.array([s2data2[:,0],g2data2[:,0],s35data[:,0],s2vdata2[:,0],s35vxydata[:,0]])
-types = ['pxy','pxy','pxy','vz','vxy']
-measurements = [s2data2[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata2[:,1:2],s35vxydata[:,1:3]]
-errors = [s2data2[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata2[:,2:3],s35vxydata[:,3:5]]
-objects = [0,1,2,0,2]
-coords = [0,0,0,0,0]
-kind = [0,0,1]
-names = ['S2','G2','S35']
+#times = np.array([s2data2[:,0],g2data2[:,0],s35data[:,0],s2vdata2[:,0],s35vxydata[:,0]])
+#types = ['pxy','pxy','pxy','vz','vxy']
+#measurements = [s2data2[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata2[:,1:2],s35vxydata[:,1:3]]
+#errors = [s2data2[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata2[:,2:3],s35vxydata[:,3:5]]
+#objects = [0,1,2,0,2]
+#coords = [0,0,0,0,0]
+#kind = [0,0,1]
+#names = ['S2','G2','S35']
 
 zerot = min(list(flatten(times)))
 datalen = len(list(flatten(times)))
 for i in xrange(len(types)):
 	times[i] = times[i] - zerot
 
-g2reftime = min(list(flatten(np.array([g2data2[:,0],g2vdata2[:,0]])))) - zerot
+g2reftime = min(list(flatten(np.array([g2data[:,0],g2vdata[:,0],g2data2[:,0],g2vdata2[:,0]])))) - zerot
 
 print 'g2reftime', g2reftime
 
 nobjects = len(set(objects))
 ncoords = len(set(coords))
+nvaria = len(set(varia)) - 1 #Need -1 because some have no variance
 
 #x0 = [np.array([40.,0.01,0.01,200.,8.36*kpc,0.04*pc,0.9999,360.,1.,360.,360.,0.04*pc,0.9999,360.,1.,360.,360.]) * np.random.rand(ndim) for i in xrange(nwalkers)]
 
@@ -474,24 +526,96 @@ ncoords = len(set(coords))
 #						   0.04*pc,1.0], size=nwalkers)
 
 # Three objects with initial decent guess, rp allowed to float, w allowed to float, no unused free parameters, includes variable variance
-x0 = em.utils.sample_ball([39.9377048586, 6.03764200817e+14, 0.00259229857886, 0.00202617827851, -3.19123397664, -5.26122862936, -12.1680808296, 2.56181937951e+22,
-						   1.55372337623e+16, -0.922512660801, 43.9219041718, 0.629817298992, 244.320447563, 45.0406570285,
-						   1.03433664987e+17, -1.78166243609, 188.411516325, 0.0785951978784, 285.378895166, 62.9907152784,
-						   0.04*pc,-2.,2.76476139e+02],
-				  		  [0.1,1.0e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-						   0.04*pc,1.0,3.6], size=nwalkers)
+#x0 = em.utils.sample_ball([39.9377048586, 1.e-7, 100., 0.00259229857886, 0.00202617827851, -3.19123397664, -5.26122862936, -12.1680808296, 2.56181937951e+22,
+#						   1.55372337623e+16, -0.922512660801, 43.9219041718, 0.629817298992, 244.320447563, 45.0406570285,
+#						   1.03433664987e+17, -1.78166243609, 188.411516325, 0.0785951978784, 285.378895166, 62.9907152784,
+#						   0.04*pc,-2.,2.76476139e+02],
+#				  		  [0.1,1.e-7,100.,0.0001,0.0001,20.,20.,20.,0.1*kpc,
+#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.04*pc,1.0,3.6], size=nwalkers)
 
 # Three objects with initial decent guess, rp fixed, w allowed to float, no unused free parameters, includes variable variance
-#x0 = em.utils.sample_ball([39.9377048586, 6.03764200817e+14, 0.00259229857886, 0.00202617827851, -3.19123397664, -5.26122862936, -12.1680808296, 2.56181937951e+22,
+#x0 = em.utils.sample_ball([39.9377048586, 1.e-7, 100., 0.00259229857886, 0.00202617827851, -3.19123397664, -5.26122862936, -12.1680808296, 2.56181937951e+22,
 #						   1.55372337623e+16, -0.922512660801, 43.9219041718, 0.629817298992, 244.320447563, 45.0406570285,
 #						   1.03433664987e+17, -1.78166243609, 188.411516325, 0.0785951978784, 285.378895166, 62.9907152784,
 #						   0.04*pc,2.76476139e+02],
-#				  		  [0.1,1.0e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
+#				  		  [0.1,1.e-7,100.,0.0001,0.0001,20.,20.,20.,0.1*kpc,
 #						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,36.,0.1,36.,36.,
-#						   0.04*pc,36.], size=nwalkers)
+#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.04*pc,3.6], size=nwalkers)
+
+# Three objects with initial decent guess, rp fixed, w allowed to float, no unused free parameters, includes variable variance, both Genzel and Ghez
+if args.samerp and not args.samew:
+	x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
+							   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
+							   0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458, 
+							   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
+							   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
+							   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
+							   1.11284254908e+17, 283.139781117],
+							  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,1.e-7,10.,10.,
+							   0.0001,0.0001,2.,2.,2.,
+							   0.0001,0.0001,2.,2.,2.,
+							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+							   0.04*pc,3.6], size=nwalkers)
+elif not args.samerp and not args.samew:
+	x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
+							   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
+							   0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458, 
+							   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
+							   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
+							   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
+							   1.11284254908e+17, -1.27583250582, 283.139781117],
+							  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,1.e-7,10.,10.,
+							   0.0001,0.0001,2.,2.,2.,
+							   0.0001,0.0001,2.,2.,2.,
+							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+							   0.04*pc,0.1,3.6], size=nwalkers)
+elif not args.samerp and args.samew:
+	x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
+							   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
+							   0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458, 
+							   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
+							   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
+							   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
+							   1.11284254908e+17, -1.27583250582],
+							  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,1.e-7,10.,10.,
+							   0.0001,0.0001,2.,2.,2.,
+							   0.0001,0.0001,2.,2.,2.,
+							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+							   0.04*pc,0.1], size=nwalkers)
+
+#x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
+#						   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 218.203119924, 155.743124678,
+#						   0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458, 
+#						   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
+#						   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
+#						   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
+#						   1.11284254908e+17, -1.27583250582],
+#						  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,10.,10.,
+#						   0.0001,0.0001,2.,2.,2.,
+#						   0.0001,0.0001,2.,2.,2.,
+#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.04*pc,0.1], size=nwalkers)
+
+#x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
+#						   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 218.203119924, 155.743124678,
+#						   0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458, 
+#						   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
+#						   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
+#						   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
+#						   1.11284254908e+17, 283.139781117],
+#						  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,10.,10.,
+#						   0.0001,0.0001,2.,2.,2.,
+#						   0.0001,0.0001,2.,2.,2.,
+#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.04*pc, 3.6], size=nwalkers)
 
 # Forced high eccentricity
 #x0 = em.utils.sample_ball([3.99298621e+01, 4.50478826e-03, -1.28610303e-02, -5.16967075e+00, 2.64503308e+01, 2.78545427e+00, 2.41850038e+22,
@@ -532,13 +656,13 @@ if not pool.is_master():
 	pool.wait()
 	sys.exit(0)
 
-sampler = em.EnsembleSampler(nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords, True, 1, False], pool = pool)
+sampler = em.EnsembleSampler(nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords, varia, args.prior, 1, False], pool = pool)
 
 # Doesn't accept args, difficult to use.
-#sampler = em.PTSampler(ntemps, nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords], pool = pool)
+#sampler = em.PTSampler(ntemps, nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords, varia], pool = pool)
 
 pos = x0
-prob = np.array([obj_func(x, times, types, measurements, errors, objects, coords, True, 1, False) for x in x0])
+prob = np.array([obj_func(x, times, types, measurements, errors, objects, coords, varia, args.prior, 1, False) for x in x0])
 state = sampler.random_state
 
 for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=False, lnprob0=prob, rstate0=state)):
@@ -547,15 +671,14 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 
 	temp = temp*(1.0/t0)**(1.0/nburn)
 	#prob = prob/(1.0/t0)**(1.0/nsteps)
-	#prob = np.array([obj_func(x, times, types, measurements, errors, objects, coords) for x in pos])
+	#prob = np.array([obj_func(x, times, types, measurements, errors, objects, coords, varia, 1, False) for x in pos])
 
-	ncoords = len(set(coords))
-	mhx = x[2:5*ncoords+2:5]
-	mhy = x[3:5*ncoords+2:5]
-	mhvx = x[4:5*ncoords+2:5]
-	mhvy = x[5:5*ncoords+2:5]
-	mhvz = x[6:5*ncoords+2:5]
-	mhz = x[5*ncoords+2]
+	mhx =  x[nvaria+1:5*ncoords+nvaria+1:5]
+	mhy =  x[nvaria+2:5*ncoords+nvaria+1:5]
+	mhvx = x[nvaria+3:5*ncoords+nvaria+1:5]
+	mhvy = x[nvaria+4:5*ncoords+nvaria+1:5]
+	mhvz = x[nvaria+5:5*ncoords+nvaria+1:5]
+	mhz =  x[5*ncoords+nvaria+1]
 
 	# Only works if all objects are full
 	#for p, pro in enumerate(prob):
@@ -582,7 +705,7 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 		print 'Replaced', replacecount, 'walkers (', 100.*float(replacecount)/float(nwalkers), '%)'
 	print ', '.join(map(str,best_pos))
 	print best_prob
-	best_prob = obj_func(best_pos, times, types, measurements, errors, objects, coords, False, 0, True)
+	best_prob = obj_func(best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)
 	print best_prob
 	lmh = best_pos[0]
 	mh = 10.**lmh
@@ -617,16 +740,7 @@ if pool.is_master():
 	np.savetxt(f_handle, prob)
 	f_handle.close()
 
-	obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, False, 0, True)
-
-	lmh = best_pos[0]
-	variance = best_pos[1]
-	mhx = best_pos[2:5*ncoords+2:5]
-	mhy = best_pos[3:5*ncoords+2:5]
-	mhvx = best_pos[4:5*ncoords+2:5]
-	mhvy = best_pos[5:5*ncoords+2:5]
-	mhvz = best_pos[6:5*ncoords+2:5]
-	mhz = best_pos[5*ncoords+2]
+	obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, varia, False, 0, True)
 
 	orbtimes = [[] for _ in xrange(nobjects)]
 	orbtimes2 = [[] for _ in xrange(nobjects)]
@@ -654,9 +768,6 @@ if pool.is_master():
 		if types[t] == 'pxy':
 			posx[gi].extend((vecs[t][:,0] - 2.*mhz*np.tan(mhx[ci]*iasec) - mhvx[ci]*km*stimes)*impc)
 			posy[gi].extend((vecs[t][:,1] - 2.*mhz*np.tan(mhy[ci]*iasec) - mhvy[ci]*km*stimes)*impc)
-			#if (gi == 1):
-			#	posx[2].extend(vecs2[t][:,0]*impc)
-			#	posy[2].extend(vecs2[t][:,1]*impc)
 		elif types[t] =='vxy':
 			pltt[gi].extend((zerot + stimes)/yr)
 			velx[gi].extend(vecs[t][:,0]*ikm - mhvx[ci])
@@ -670,7 +781,7 @@ if pool.is_master():
 	ensembletimes = np.arange(velztmin, velztmax + velzdt, velzdt)
 	ensemblevels = np.zeros(shape=(nwalkers,nobjects,len(ensembletimes),3))
 	for w in xrange(nwalkers):
-		obj_func(pos[w], times, types, measurements, errors, objects, coords, False, 2, False)
+		obj_func(pos[w], times, types, measurements, errors, objects, coords, varia, False, 2, False)
 		lmh = pos[w,0]
 		kes = get_star_ke(elements, lmh)
 		for i, e in enumerate(elements):
@@ -689,10 +800,15 @@ if pool.is_master():
 			print msig, psig, ensemblevels[msig,g,t,2], ensemblevels[psig,g,t,2]
 	print 'Done with ensemble'
 
+	# Set globals back to best solution
+	obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, varia, False, 0, True)
+
 	mpl.rcParams.update({'font.size': 16})
 
 	fig, (posplt, velzplt, velxyplt) = plt.subplots(1,3)
 	#fig, (posplt, velzplt) = plt.subplots(1,2)
+
+	fig.tight_layout()
 
 	for g in xrange(nobjects):
 		velzplt.fill_between(ensembletimes, velzminvec[g], velzmaxvec[g], facecolor=lgcolors[g], edgecolor='none', interpolate=True)
@@ -730,32 +846,42 @@ if pool.is_master():
 	posplt.set_xlabel('$x$ (mpc)', fontsize=18)
 	posplt.set_ylabel('$y$ (mpc)', fontsize=18)
 
-	mhz = pos[prob.argmax(),5*ncoords+2]
+	velxyplt.set_xlabel('$v_x$ (km/s)', fontsize=18)
+	velxyplt.set_ylabel('$v_y$ (km/s)', fontsize=18)
 
 	posplt.plot(0., 0., 'ko')
 
 	for m, mea in enumerate(measurements):
-		tim = times[m]
+		tim = times[m] + zerot
 		typ = types[m]
 		err = errors[m]
 		obj = objects[m]
 		coo = coords[m]
 		nam = names[obj]
+		var = varia[m]
 
 		if typ == 'pxy':
-			x = (mhz*mea[:,0] - 2.*mhz*np.tan(mhx[coo]*iasec) - mhvx[coo]*km*tim)*impc
-			y = (mhz*mea[:,1] - 2.*mhz*np.tan(mhy[coo]*iasec) - mhvy[coo]*km*tim)*impc
-			if obj == 1:
-				u = np.sqrt((mhz*err[:,0])**2 + variance**2)*impc
-				v = np.sqrt((mhz*err[:,1])**2 + variance**2)*impc
+			x = (mhz*mea[:,0] - 2.*mhz*np.tan(mhx[coo]*iasec) - mhvx[coo]*km*(tim - zerot))*impc
+			y = (mhz*mea[:,1] - 2.*mhz*np.tan(mhy[coo]*iasec) - mhvy[coo]*km*(tim - zerot))*impc
+
+			if var != -1:
+				variancepxy2 = variances[var]**2
 			else:
-				u = mhz*err[:,0]*impc
-				v = mhz*err[:,1]*impc
+				variancepxy2 = 0.
+
+			u = mhz*np.sqrt(err[:,0]**2 + variancepxy2)*impc
+			v = mhz*np.sqrt(err[:,1]**2 + variancepxy2)*impc
 
 			posplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		elif typ == 'vz':
 			y = -(mea[:,0]*ikm - mhvz[coo]) # Flip sign back to match convention
-			v = err[:,0]*ikm
+
+			if var != -1:
+				variancevz2 = variances[var]**2
+			else:
+				variancevz2 = 0.
+
+			v = np.sqrt((err[:,0]*ikm)**2 + variancevz2)
 
 			velzplt.errorbar(tim/yr, y, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		elif typ == 'vxy':
@@ -770,9 +896,9 @@ if pool.is_master():
 			print 'Illegal measurement type'
 			sys.exit(0)
 
-	fig.set_size_inches(20.,7.)
+	fig.set_size_inches(20.,5.)
 	plt.savefig('fit.png',dpi=100,bbox_inches='tight')
-	fig.set_size_inches(20.,7.)
+	fig.set_size_inches(20.,5.)
 	plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
 	plt.show()
 
