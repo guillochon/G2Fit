@@ -20,6 +20,7 @@ parser.add_argument('--samerp',           dest='samerp',    help='G2 and S35 for
 parser.add_argument('--samew',            dest='samew',     help='G2 and S35 forced to have same w',  					default=False, action='store_true')
 parser.add_argument('--noproprec',        dest='noproprec', help='S35 not allowed to precess prograde relative to G2',  default=False, action='store_true')
 parser.add_argument('--prior',            dest='prior',     help='Use prior for Sgr A* properties',                     default=False, action='store_true')
+parser.add_argument('--sch',              dest='sch',       help='Specify star from Schodel catalog',                   default=-1,    type=int)
 args = parser.parse_args()
 
 def neg_obj_func(x, ptimes, vtimes):
@@ -212,8 +213,8 @@ global temp, elements, vecs, vecs2, variances
 rpmax = 1.e300
 
 # User adjustable parameters
-nwalkers = 512
-nsteps = 5000
+nwalkers = 256
+nsteps = 4000
 nburn = nsteps/2
 t0 = 1.e4
 
@@ -258,8 +259,12 @@ g2vdata2 = np.loadtxt(cd+"/VLT/G2.rv")
 #s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy")
 #s35data = np.loadtxt(cd+"/VLT/S35.points.two")
 #s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy.two")
-s35data = np.loadtxt(cd+"/NACO/S35.points.gillessen")
-s35vxydata = np.loadtxt(cd+"/NACO/S35.vxy.gillessen")
+if args.sch == -1:
+	s35data = np.loadtxt(cd+"/NACO/S35.points.gillessen")
+	s35vxydata = np.loadtxt(cd+"/NACO/S35.vxy.gillessen")
+else:
+	s35data = np.loadtxt(cd+"/NACO/Sch"+str(args.sch)+".points")
+	s35vxydata = np.loadtxt(cd+"/NACO/Sch"+str(args.sch)+".vxy")
 
 # Convert data units
 s2data[:,0] = s2data[:,0]*yr
@@ -335,6 +340,16 @@ coords = [0,1,0,1,1,0,1,0,1,1]
 kind = [0,0,1]
 names = ['S2','G2','S35']
 varia = [0,1,2,3,-1,-1,-1,4,5,-1]
+# Both datasets minus S35
+#times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0]])
+#types = ['pxy','pxy','pxy','pxy','vz','vz','vz','vz']
+#measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2]]
+#errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3]]
+#objects = [0,0,1,1,0,0,1,1]
+#coords = [0,1,0,1,0,1,0,1]
+#kind = [0,0]
+#names = ['S2','G2']
+#varia = [0,1,2,3,-1,-1,4,5]
 # Both datasets, minus Gillessen G2 position
 #times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],s35data[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],s35vxydata[:,0]])
 #types = ['pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy']
@@ -553,13 +568,13 @@ if args.samerp and not args.samew:
 							   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
 							   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
 							   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
-							   1.11284254908e+17, 283.139781117],
+							   1.e+18, 283.490710366],
 							  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,1.e-7,10.,10.,
 							   0.0001,0.0001,2.,2.,2.,
 							   0.0001,0.0001,2.,2.,2.,
 							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
 							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-							   0.04*pc,3.6], size=nwalkers)
+							   0.1*pc,36.], size=nwalkers)
 elif not args.samerp and not args.samew:
 	x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
 							   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
@@ -567,13 +582,13 @@ elif not args.samerp and not args.samew:
 							   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
 							   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
 							   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
-							   1.11284254908e+17, -1.27583250582, 283.139781117],
+							   1.11284254908e+18, -1.27583250582, 283.139781117],
 							  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,1.e-7,10.,10.,
 							   0.0001,0.0001,2.,2.,2.,
 							   0.0001,0.0001,2.,2.,2.,
 							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
 							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-							   0.04*pc,0.1,3.6], size=nwalkers)
+							   0.4*pc,0.1,3.6], size=nwalkers)
 elif not args.samerp and args.samew:
 	x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
 							   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
@@ -588,6 +603,19 @@ elif not args.samerp and args.samew:
 							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
 							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
 							   0.04*pc,0.1], size=nwalkers)
+#x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
+#						   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
+#						   0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458, 
+#						   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
+#						   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
+#						   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252
+#						   ],
+#						  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,1.e-7,10.,10.,
+#						   0.0001,0.0001,2.,2.,2.,
+#						   0.0001,0.0001,2.,2.,2.,
+#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6
+#						   ], size=nwalkers)
 
 #x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
 #						   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 218.203119924, 155.743124678,
@@ -704,6 +732,7 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 				prob[i] = prob[ni]
 		print 'Replaced', replacecount, 'walkers (', 100.*float(replacecount)/float(nwalkers), '%)'
 	print ', '.join(map(str,best_pos))
+	best_y = -best_prob
 	print best_prob
 	best_prob = obj_func(best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)
 	print best_prob
@@ -721,7 +750,8 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 		print names[i], 'prev peri time:', perits[i]/yr
 		print names[i], 'next peri time:', (zerot + taus[i]*periods[i])/yr
 	#print 'Reduced chi^2:', -temp*prob[prob.argmax()]/(datalen - ndim - 1.)
-	print 'Reduced chi^2:', -best_prob/(datalen - ndim - 1.)
+	best_chi2 = -best_prob/(datalen - ndim - 1.)
+	print 'Reduced chi^2:', best_chi2
 
 pool.close()
 dp = 0.00025
@@ -734,8 +764,15 @@ gcolors = ['b','g','y']
 lgcolors = [(0.5,0.5,0.75),(0.5,0.75,0.5),(0.75,0.75,0.5)]
 
 if pool.is_master():
-	np.savetxt('pos.out', np.array([nwalkers,ndim,nsteps]))
-	f_handle = file('pos.out', 'a')
+	if args.sch == -1:
+		fname = 'pos.out'
+	else:
+		f = open('sch.scores', 'a', os.O_NONBLOCK)
+		f.write(str(args.sch) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
+		f.flush()
+		fname = 'pos.sch'+str(args.sch)+'.out'
+	np.savetxt(fname, np.array([nwalkers,ndim,nsteps]))
+	f_handle = file(fname, 'a')
 	np.savetxt(f_handle, pos)
 	np.savetxt(f_handle, prob)
 	f_handle.close()
@@ -896,9 +933,12 @@ if pool.is_master():
 			print 'Illegal measurement type'
 			sys.exit(0)
 
+	#fig.set_size_inches(20.,5.)
+	#plt.savefig('fit.png',dpi=100,bbox_inches='tight')
 	fig.set_size_inches(20.,5.)
-	plt.savefig('fit.png',dpi=100,bbox_inches='tight')
-	fig.set_size_inches(20.,5.)
-	plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
+	if args.sch == -1:
+		plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
+	else:
+		plt.savefig('fit.sch'+str(args.sch)+'.pdf',dpi=100,bbox_inches='tight')
 	plt.show()
 
