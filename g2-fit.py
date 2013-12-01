@@ -20,7 +20,10 @@ parser.add_argument('--samerp',           dest='samerp',    help='G2 and S35 for
 parser.add_argument('--samew',            dest='samew',     help='G2 and S35 forced to have same w',  					default=False, action='store_true')
 parser.add_argument('--noproprec',        dest='noproprec', help='S35 not allowed to precess prograde relative to G2',  default=False, action='store_true')
 parser.add_argument('--prior',            dest='prior',     help='Use prior for Sgr A* properties',                     default=False, action='store_true')
-parser.add_argument('--sch',              dest='sch',       help='Specify star from Schodel catalog',                   default=-1,    type=int)
+parser.add_argument('--dataset',          dest='dataset',   help='Dataset name',                                        default='',    type=str)
+parser.add_argument('--id',               dest='id',        help='ID of star in dataset',  				                default=-1,    type=int)
+parser.add_argument('--nwalkers',         dest='nwalkers',  help='Number of walkers',  				                    default=-1,    type=int)
+parser.add_argument('--nsteps',           dest='nsteps',    help='Number of steps',  				                    default=-1,    type=int)
 args = parser.parse_args()
 
 def neg_obj_func(x, ptimes, vtimes):
@@ -213,8 +216,14 @@ global temp, elements, vecs, vecs2, variances
 rpmax = 1.e300
 
 # User adjustable parameters
-nwalkers = 256
-nsteps = 4000
+if args.nwalkers == -1:
+	nwalkers = 64
+else:
+	nwalkers = args.nwalkers
+if args.nsteps == -1:
+	nsteps = 1000
+else:
+	nsteps = args.nsteps
 nburn = nsteps/2
 t0 = 1.e4
 
@@ -259,12 +268,22 @@ g2vdata2 = np.loadtxt(cd+"/VLT/G2.rv")
 #s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy")
 #s35data = np.loadtxt(cd+"/VLT/S35.points.two")
 #s35vxydata = np.loadtxt(cd+"/VLT/S35.vxy.two")
-if args.sch == -1:
+if args.dataset == 'sch':
+	if args.id == -1:
+		args.id = 20
+	else:
+		s35data = np.loadtxt(cd+"/NACO/Sch"+str(args.id)+".points")
+		s35vxydata = np.loadtxt(cd+"/NACO/Sch"+str(args.id)+".vxy")
+elif args.dataset == 'lu':
+	if args.id == -1:
+		args.id = 1
+	else:
+		s35data = np.loadtxt(cd+"/Keck/Lu"+str(args.id)+".points")
+		s35vxydata = np.loadtxt(cd+"/Keck/Lu"+str(args.id)+".vxy")
+		s35vdata = np.loadtxt(cd+"/Keck/Lu"+str(args.id)+".rv")
+else:
 	s35data = np.loadtxt(cd+"/NACO/S35.points.gillessen")
 	s35vxydata = np.loadtxt(cd+"/NACO/S35.vxy.gillessen")
-else:
-	s35data = np.loadtxt(cd+"/NACO/Sch"+str(args.sch)+".points")
-	s35vxydata = np.loadtxt(cd+"/NACO/Sch"+str(args.sch)+".vxy")
 
 # Convert data units
 s2data[:,0] = s2data[:,0]*yr
@@ -329,17 +348,33 @@ s35data[:,1:] = 2.*np.tan(s35data[:,1:]*iasec)
 s35vxydata = np.reshape(s35vxydata, (-1, 5))
 s35vxydata[:,0] = s35vxydata[:,0]*yr
 s35vxydata[:,1:] = 2.*np.tan(s35vxydata[:,1:]*iasec)/yr
+if args.dataset == 'lu':
+	s35vdata = np.reshape(s35vdata, (-1, 3))
+	s35vdata[:,0] = s35vdata[:,0]*yr
+	s35vdata[:,1] = -s35vdata[:,1]
+	s35vdata[:,1:] = s35vdata[:,1:]*km
 
 # Both datasets
-times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s35data[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],s35vxydata[:,0]])
-types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy']
-measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],s35vxydata[:,1:3]]
-errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],s35vxydata[:,3:5]]
-objects = [0,0,1,1,2,0,0,1,1,2]
-coords = [0,1,0,1,1,0,1,0,1,1]
-kind = [0,0,1]
-names = ['S2','G2','S35']
-varia = [0,1,2,3,-1,-1,-1,4,5,-1]
+if args.dataset == 'lu':
+	times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s35data[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],s35vxydata[:,0],s35vdata[:,0]])
+	types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy','vz']
+	measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],s35vxydata[:,1:3],s35vdata[:,1:2]]
+	errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],s35vxydata[:,3:5],s35vdata[:,2:3]]
+	objects = [0,0,1,1,2,0,0,1,1,2,2]
+	coords = [0,1,0,1,1,0,1,0,1,1,0]
+	kind = [0,0,1]
+	names = ['S2','G2','S35']
+	varia = [0,1,2,3,-1,-1,-1,4,5,-1,-1]
+else:
+	times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s35data[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],s35vxydata[:,0]])
+	types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy']
+	measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],s35data[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],s35vxydata[:,1:3]]
+	errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],s35data[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],s35vxydata[:,3:5]]
+	objects = [0,0,1,1,2,0,0,1,1,2]
+	coords = [0,1,0,1,1,0,1,0,1,1]
+	kind = [0,0,1]
+	names = ['S2','G2','S35']
+	varia = [0,1,2,3,-1,-1,-1,4,5,-1]
 # Both datasets minus S35
 #times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0]])
 #types = ['pxy','pxy','pxy','pxy','vz','vz','vz','vz']
@@ -575,6 +610,20 @@ if args.samerp and not args.samew:
 							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
 							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
 							   0.1*pc,36.], size=nwalkers)
+elif args.samerp and args.samew:
+	x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
+							   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
+							   0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458, 
+							   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
+							   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
+							   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
+							   1.e+18],
+							  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,1.e-7,10.,10.,
+							   0.0001,0.0001,2.,2.,2.,
+							   0.0001,0.0001,2.,2.,2.,
+							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
+							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+							   0.1*pc], size=nwalkers)
 elif not args.samerp and not args.samew:
 	x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
 							   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
@@ -764,13 +813,18 @@ gcolors = ['b','g','y']
 lgcolors = [(0.5,0.5,0.75),(0.5,0.75,0.5),(0.75,0.75,0.5)]
 
 if pool.is_master():
-	if args.sch == -1:
-		fname = 'pos.out'
-	else:
+	if args.dataset == 'sch':
 		f = open('sch.scores', 'a', os.O_NONBLOCK)
-		f.write(str(args.sch) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
+		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
 		f.flush()
-		fname = 'pos.sch'+str(args.sch)+'.out'
+		fname = 'pos.sch'+str(args.id)+'.out'
+	if args.dataset == 'lu':
+		f = open('lu.scores', 'a', os.O_NONBLOCK)
+		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
+		f.flush()
+		fname = 'pos.lu'+str(args.id)+'.out'
+	else:
+		fname = 'pos.out'
 	np.savetxt(fname, np.array([nwalkers,ndim,nsteps]))
 	f_handle = file(fname, 'a')
 	np.savetxt(f_handle, pos)
@@ -936,9 +990,11 @@ if pool.is_master():
 	#fig.set_size_inches(20.,5.)
 	#plt.savefig('fit.png',dpi=100,bbox_inches='tight')
 	fig.set_size_inches(20.,5.)
-	if args.sch == -1:
-		plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
+	if args.dataset == 'sch':
+		plt.savefig('fit.sch'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
+	if args.dataset == 'lu':
+		plt.savefig('fit.lu'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
 	else:
-		plt.savefig('fit.sch'+str(args.sch)+'.pdf',dpi=100,bbox_inches='tight')
+		plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
 	plt.show()
 
