@@ -992,7 +992,7 @@ if pool.is_master():
 	fig.set_size_inches(20.,5.)
 	if args.dataset == 'sch':
 		plt.savefig('fit.sch'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
-	if args.dataset == 'lu':
+	elif args.dataset == 'lu':
 		plt.savefig('fit.lu'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
 	else:
 		plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
