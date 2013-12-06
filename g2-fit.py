@@ -251,7 +251,8 @@ zstretch = ((zscale - 1.) + 1.)**2/zscale
 nvaria = 2
 
 #cd = os.getcwd()
-cd = '/pfs/james/g2fit'
+#cd = '/pfs/james/g2fit'
+cd = os.path.dirname(os.path.realpath(__file__))
 
 # Load data files
 s2data = np.loadtxt(cd+"/Keck/S2.points")
@@ -645,13 +646,13 @@ elif not args.samerp and args.samew:
 							   0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986,
 							   1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
 							   9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
-							   1.11284254908e+17, -1.27583250582],
+							   1.e+18, -1.27583250582],
 							  [0.1,0.1*kpc,1.e-9,1.e-9,1.e-7,1.e-7,10.,10.,
 							   0.0001,0.0001,2.,2.,2.,
 							   0.0001,0.0001,2.,2.,2.,
 							   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
 							   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-							   0.04*pc,0.1], size=nwalkers)
+							   1.e+18,0.1], size=nwalkers)
 #x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
 #						   7.13167564576e-10, 2.74688202102e-09, 4.49782433776e-07, 2.28807118575e-07, 218.203119924, 155.743124678,
 #						   0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458, 
@@ -818,7 +819,7 @@ if pool.is_master():
 		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
 		f.flush()
 		fname = 'pos.sch'+str(args.id)+'.out'
-	if args.dataset == 'lu':
+	elif args.dataset == 'lu':
 		f = open('lu.scores', 'a', os.O_NONBLOCK)
 		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
 		f.flush()
@@ -996,5 +997,6 @@ if pool.is_master():
 		plt.savefig('fit.lu'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
 	else:
 		plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
-	plt.show()
+	#plt.show()
 
+sys.exit()
