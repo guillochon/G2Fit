@@ -288,6 +288,13 @@ elif args.dataset == 'lu':
 		canddata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".points")
 		candvxydata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".vxy")
 		candvdata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".rv")
+elif args.dataset == 'do':
+	if args.id == -1:
+		args.id = 1
+	else:
+		canddata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".points")
+		candvxydata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".vxy")
+		candvdata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".rv")
 else:
 	print "Invalid dataset selected"
 	sys.exit(0)
@@ -355,7 +362,7 @@ canddata[:,1:] = 2.*np.tan(canddata[:,1:]*iasec)
 candvxydata = np.reshape(candvxydata, (-1, 5))
 candvxydata[:,0] = candvxydata[:,0]*yr
 candvxydata[:,1:] = 2.*np.tan(candvxydata[:,1:]*iasec)/yr
-if args.dataset == 'lu':
+if args.dataset == 'lu' or args.dataset == 'do':
 	candvdata = np.reshape(candvdata, (-1, 3))
 	candvdata[:,0] = candvdata[:,0]*yr
 	candvdata[:,1] = -candvdata[:,1]
@@ -364,7 +371,7 @@ if args.dataset == 'lu':
 # Both datasets
 
 if args.inputs == 0:
-	if args.dataset == 'lu':
+	if args.dataset == 'lu' or args.dataset == 'do':
 		times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0],candvdata[:,0]])
 		types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy','vz']
 		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3],candvdata[:,1:2]]
@@ -774,6 +781,11 @@ if pool.is_master():
 		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
 		f.flush()
 		fname = 'pos.lu'+str(args.id)+'.out'
+	elif args.dataset == 'do':
+		f = open('do.scores', 'a', os.O_NONBLOCK)
+		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
+		f.flush()
+		fname = 'pos.do'+str(args.id)+'.out'
 	else:
 		fname = 'pos.out'
 	np.savetxt(fname, np.array([nwalkers,ndim,nsteps]))
@@ -947,6 +959,8 @@ if pool.is_master():
 		plt.savefig('fit.yel'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
 	elif args.dataset == 'lu':
 		plt.savefig('fit.lu'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
+	elif args.dataset == 'do':
+		plt.savefig('fit.do'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
 	else:
 		plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
 	#plt.show()
