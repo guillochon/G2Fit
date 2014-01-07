@@ -24,6 +24,7 @@ parser.add_argument('--dataset',          dest='dataset',   help='Dataset name',
 parser.add_argument('--id',               dest='id',        help='ID of star in dataset',  				                default=-1,    type=int)
 parser.add_argument('--nwalkers',         dest='nwalkers',  help='Number of walkers',  				                    default=-1,    type=int)
 parser.add_argument('--nsteps',           dest='nsteps',    help='Number of steps',  				                    default=-1,    type=int)
+parser.add_argument('--inputs',           dest='inputs',    help='Which data to use for S2/G2',  			            default=-1,    type=int)
 args = parser.parse_args()
 
 def neg_obj_func(x, ptimes, vtimes):
@@ -215,6 +216,10 @@ global temp, elements, vecs, vecs2, variances
 # Some options to toggle
 rpmax = 1.e300
 
+if args.inputs == -1:
+	print 'Error, must specify inputs'
+	sys.exit(0)
+
 # User adjustable parameters
 if args.nwalkers == -1:
 	nwalkers = 64
@@ -252,45 +257,40 @@ nvaria = 2
 
 #cd = os.getcwd()
 #cd = '/pfs/james/g2fit'
-cd = os.path.dirname(os.path.realpath(__file__))
+cd = os.path.dirname(os.path.realpath(__file__))+"/observations/"
 
 # Load data files
-s2data = np.loadtxt(cd+"/Keck/S2.points")
-s2data2 = np.loadtxt(cd+"/NACO/S2.points")
-s2vdata = np.loadtxt(cd+"/Keck/S2.rv")
-s2vdata2 = np.loadtxt(cd+"/VLT/S2.rv")
-g2data = np.loadtxt(cd+"/Keck/G2.points")
-g2data2 = np.loadtxt(cd+"/VLT/G2.points")
-#g2data2 = np.loadtxt(cd+"/NTT/G2-half.points")
-g2vdata = np.loadtxt(cd+"/Keck/G2.rv")
-g2vdata2 = np.loadtxt(cd+"/VLT/G2.rv")
-#g2vdata2 = np.loadtxt(cd+"/VLT/G2-half.rv")
-#canddata = np.loadtxt(cd+"/VLT/Candidate.points")
-#candvxydata = np.loadtxt(cd+"/VLT/Candidate.vxy")
-#canddata = np.loadtxt(cd+"/VLT/Candidate.points.two")
-#candvxydata = np.loadtxt(cd+"/VLT/Candidate.vxy.two")
+s2data = np.loadtxt(cd+"phifer-2013/S2.points")
+s2data2 = np.loadtxt(cd+"gillessen-2009b/S2.points")
+s2vdata = np.loadtxt(cd+"phifer-2013/S2.rv")
+s2vdata2 = np.loadtxt(cd+"gillessen-2009b/S2.rv")
+g2data = np.loadtxt(cd+"phifer-2013/G2.points")
+g2data2 = np.loadtxt(cd+"gillessen-2013/G2.points.brg")
+g2vdata = np.loadtxt(cd+"phifer-2013/G2.rv")
+g2vdata2 = np.loadtxt(cd+"gillessen-2013/G2.rv")
+
 if args.dataset == 'sch':
 	if args.id == -1:
 		args.id = 20
 	else:
-		canddata = np.loadtxt(cd+"/NACO/Sch"+str(args.id)+".points")
-		candvxydata = np.loadtxt(cd+"/NACO/Sch"+str(args.id)+".vxy")
-elif args.dataset == 'do':
+		canddata = np.loadtxt(cd+"schoedel-2009/Sch"+str(args.id)+".points")
+		candvxydata = np.loadtxt(cd+"schoedel-2009/Sch"+str(args.id)+".vxy")
+elif args.dataset == 'yel':
 	if args.id == -1:
-		args.id = 1
+		args.id = 20
 	else:
-		canddata = np.loadtxt(cd+"/Keck/Do"+str(args.id)+".points")
-		candvxydata = np.loadtxt(cd+"/Keck/Do"+str(args.id)+".vxy")
+		canddata = np.loadtxt(cd+"yelda-2010/Yelda"+str(args.id)+".points")
+		candvxydata = np.loadtxt(cd+"yelda-2010/Yelda"+str(args.id)+".vxy")
 elif args.dataset == 'lu':
 	if args.id == -1:
 		args.id = 1
 	else:
-		canddata = np.loadtxt(cd+"/Keck/Lu"+str(args.id)+".points")
-		candvxydata = np.loadtxt(cd+"/Keck/Lu"+str(args.id)+".vxy")
-		candvdata = np.loadtxt(cd+"/Keck/Lu"+str(args.id)+".rv")
+		canddata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".points")
+		candvxydata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".vxy")
+		candvdata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".rv")
 else:
-	canddata = np.loadtxt(cd+"/NACO/Candidate.points.gillessen")
-	candvxydata = np.loadtxt(cd+"/NACO/Candidate.vxy.gillessen")
+	print "Invalid dataset selected"
+	sys.exit(0)
 
 # Convert data units
 s2data[:,0] = s2data[:,0]*yr
@@ -362,29 +362,31 @@ if args.dataset == 'lu':
 	candvdata[:,1:] = candvdata[:,1:]*km
 
 # Both datasets
-if args.dataset == 'lu':
-	times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0],candvdata[:,0]])
-	types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy','vz']
-	measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3],candvdata[:,1:2]]
-	errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5],candvdata[:,2:3]]
-	objects = [0,0,1,1,2,0,0,1,1,2,2]
-	coords = [0,1,0,1,1,0,1,0,1,1,0]
-	kind = [0,0,1]
-	names = ['S2','G2','Candidate']
-	varia = [0,1,2,3,-1,-1,-1,4,5,-1,-1]
-else:
-	times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0]])
-	types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy']
-	measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3]]
-	errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5]]
-	objects = [0,0,1,1,2,0,0,1,1,2]
-	if args.dataset == 'sch':
-		coords = [0,1,0,1,1,0,1,0,1,1]
+
+if args.inputs == 0:
+	if args.dataset == 'lu':
+		times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0],candvdata[:,0]])
+		types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy','vz']
+		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3],candvdata[:,1:2]]
+		errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5],candvdata[:,2:3]]
+		objects = [0,0,1,1,2,0,0,1,1,2,2]
+		coords = [0,1,0,1,1,0,1,0,1,1,0]
+		kind = [0,0,1]
+		names = ['S2','G2','Candidate']
+		varia = [0,1,2,3,-1,-1,-1,4,5,-1,-1]
 	else:
-		coords = [0,1,0,1,0,0,1,0,1,0]
-	kind = [0,0,1]
-	names = ['S2','G2','Candidate']
-	varia = [0,1,2,3,-1,-1,-1,4,5,-1]
+		times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0]])
+		types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy']
+		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3]]
+		errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5]]
+		objects = [0,0,1,1,2,0,0,1,1,2]
+		if args.dataset == 'sch' or args.dataset == 'yel':
+			coords = [0,1,0,1,1,0,1,0,1,1]
+		else:
+			coords = [0,1,0,1,0,0,1,0,1,0]
+		kind = [0,0,1]
+		names = ['S2','G2','Candidate']
+		varia = [0,1,2,3,-1,-1,-1,4,5,-1]
 # Both datasets minus Candidate
 #times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0]])
 #types = ['pxy','pxy','pxy','pxy','vz','vz','vz','vz']
@@ -405,26 +407,28 @@ else:
 #kind = [0,0,1]
 #names = ['S2','G2','Candidate']
 #varia = [0,1,2,-1,-1,-1,3,4,-1]
-# Just Genzel S2 + G2 + Candidate
-#times = np.array([s2data2[:,0],g2data2[:,0],canddata[:,0],s2vdata2[:,0],g2vdata2[:,0],candvxydata[:,0]])
-#types = ['pxy','pxy','pxy','vz','vz','vxy']
-#measurements = [s2data2[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata2[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3]]
-#errors = [s2data2[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata2[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5]]
-#objects = [0,1,2,0,1,2]
-#coords = [0,0,0,0,0,0]
-#kind = [0,0,1]
-#names = ['S2','G2','Candidate']
-#varia = [0,1,-1,2,3,-1]
 # Just Ghez S2 + G2 + Candidate
-times = np.array([s2data[:,0],g2data[:,0],canddata[:,0],s2vdata[:,0],g2vdata[:,0],candvxydata[:,0]])
-types = ['pxy','pxy','pxy','vz','vz','vxy']
-measurements = [s2data[:,1:3],g2data[:,1:3],canddata[:,1:3],s2vdata[:,1:2],g2vdata[:,1:2],candvxydata[:,1:3]]
-errors = [s2data[:,3:5],g2data[:,3:5],canddata[:,3:5],s2vdata[:,2:3],g2vdata[:,2:3],candvxydata[:,3:5]]
-objects = [0,1,2,0,1,2]
-coords = [0,0,0,0,0,0]
-kind = [0,0,1]
-names = ['S2','G2','Candidate']
-varia = [0,1,-1,2,3,-1]
+elif args.inputs == 1:
+	times = np.array([s2data[:,0],g2data[:,0],canddata[:,0],s2vdata[:,0],g2vdata[:,0],candvxydata[:,0]])
+	types = ['pxy','pxy','pxy','vz','vz','vxy']
+	measurements = [s2data[:,1:3],g2data[:,1:3],canddata[:,1:3],s2vdata[:,1:2],g2vdata[:,1:2],candvxydata[:,1:3]]
+	errors = [s2data[:,3:5],g2data[:,3:5],canddata[:,3:5],s2vdata[:,2:3],g2vdata[:,2:3],candvxydata[:,3:5]]
+	objects = [0,1,2,0,1,2]
+	coords = [0,0,0,0,0,0]
+	kind = [0,0,1]
+	names = ['S2','G2','Candidate']
+	varia = [0,1,-1,2,3,-1]
+# Just Genzel S2 + G2 + Candidate
+elif args.inputs == 2:
+	times = np.array([s2data2[:,0],g2data2[:,0],canddata[:,0],s2vdata2[:,0],g2vdata2[:,0],candvxydata[:,0]])
+	types = ['pxy','pxy','pxy','vz','vz','vxy']
+	measurements = [s2data2[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata2[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3]]
+	errors = [s2data2[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata2[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5]]
+	objects = [0,1,2,0,1,2]
+	coords = [0,0,0,0,0,0]
+	kind = [0,0,1]
+	names = ['S2','G2','Candidate']
+	varia = [0,1,-1,2,3,-1]
 
 zerot = min(list(flatten(times)))
 datalen = len(list(flatten(times)))
@@ -432,8 +436,6 @@ for i in xrange(len(types)):
 	times[i] = times[i] - zerot
 
 g2reftime = min(list(flatten(np.array([g2data[:,0],g2vdata[:,0],g2data2[:,0],g2vdata2[:,0]])))) - zerot
-
-print 'g2reftime', g2reftime
 
 nobjects = len(set(objects))
 ncoords = len(set(coords))
@@ -574,13 +576,15 @@ for i in xrange(len(types)):
 			print "Illegal varia type"
 			sys.exit(0)
 
-guess.extend([0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458])
-#guess.extend([0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986])
+if args.inputs == 0 or args.inputs == 1:
+	guess.extend([0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458])
+	spread.extend([0.0001,0.0001,2.,2.,2.])
+if args.inputs == 0 or args.inputs == 2:
+	guess.extend([0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986])
+	spread.extend([0.0001,0.0001,2.,2.,2.])
 guess.extend([1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
 		      9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
 		      1.e+18])
-spread.extend([0.0001,0.0001,2.,2.,2.])
-#spread.extend([0.0001,0.0001,2.,2.,2.])
 spread.extend([0.0005*pc,0.1,3.6,0.1,3.6,3.6,
 		       0.0004*pc,0.1,3.6,0.1,3.6,3.6,
 		       0.1*pc])
@@ -760,11 +764,11 @@ if pool.is_master():
 		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
 		f.flush()
 		fname = 'pos.sch'+str(args.id)+'.out'
-	elif args.dataset == 'do':
-		f = open('do.scores', 'a', os.O_NONBLOCK)
+	elif args.dataset == 'yel':
+		f = open('yel.scores', 'a', os.O_NONBLOCK)
 		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
 		f.flush()
-		fname = 'pos.do'+str(args.id)+'.out'
+		fname = 'pos.yel'+str(args.id)+'.out'
 	elif args.dataset == 'lu':
 		f = open('lu.scores', 'a', os.O_NONBLOCK)
 		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
@@ -939,8 +943,8 @@ if pool.is_master():
 	fig.set_size_inches(20.,5.)
 	if args.dataset == 'sch':
 		plt.savefig('fit.sch'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
-	elif args.dataset == 'do':
-		plt.savefig('fit.do'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
+	elif args.dataset == 'yel':
+		plt.savefig('fit.yel'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
 	elif args.dataset == 'lu':
 		plt.savefig('fit.lu'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
 	else:
