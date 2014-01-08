@@ -377,7 +377,7 @@ if args.inputs == 0:
 		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3],candvdata[:,1:2]]
 		errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5],candvdata[:,2:3]]
 		objects = [0,0,1,1,2,0,0,1,1,2,2]
-		coords = [0,1,0,1,1,0,1,0,1,1,0]
+		coords = [0,1,0,1,0,0,1,0,1,0,0]
 		kind = [0,0,1]
 		names = ['S2','G2','Candidate']
 		varia = [0,1,2,3,-1,-1,-1,4,5,-1,-1]
