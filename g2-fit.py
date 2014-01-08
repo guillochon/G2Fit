@@ -387,7 +387,7 @@ if args.inputs == 0:
 		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3]]
 		errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5]]
 		objects = [0,0,1,1,2,0,0,1,1,2]
-		if args.dataset == 'sch' or args.dataset == 'yel':
+		if args.dataset == 'sch':
 			coords = [0,1,0,1,1,0,1,0,1,1]
 		else:
 			coords = [0,1,0,1,0,0,1,0,1,0]
