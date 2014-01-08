@@ -695,6 +695,9 @@ pos = x0
 prob = np.array([obj_func(x, times, types, measurements, errors, objects, coords, varia, args.prior, 1, False) for x in x0])
 state = sampler.random_state
 
+alltime_best_y = float("inf")
+alltime_best_chi2 = float("inf")
+alltime_best_pos = x0[0]
 for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=False, lnprob0=prob, rstate0=state)):
 	print t
 	pos, prob, state = result
@@ -720,25 +723,18 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 	best_probi = prob.argmax()
 	best_prob = prob[best_probi]
 	best_pos = pos[best_probi]
-	if (t < nburn):
-		replacecount = 0
-		for i, p in enumerate(prob):
-			#if (best_prob - p)/temp > zstretch*np.log(nwalkers + 2.0):
-			#print (best_prob - p)/temp, (np.log(zstretch)*(ndim - 1.) + np.log(nwalkers))
-			if (best_prob - p)/temp > (np.log(zstretch)*(ndim - 1.) + np.log(nwalkers)):
-				replacecount += 1
-				#print 'replacing bad walker:', i, p
-				#pos[i] = perturb(best_pos, 0.01)
-				ni = np.random.randint(nwalkers)
-				pos[i] = pos[ni]
-				prob[i] = prob[ni]
-		print 'Replaced', replacecount, 'walkers (', 100.*float(replacecount)/float(nwalkers), '%)'
-	print ', '.join(map(str,best_pos))
 	best_y = -best_prob
-	print best_prob
 	best_prob = obj_func(best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)
-	print best_prob
-	lmh = best_pos[0]
+
+	best_chi2 = -best_prob/(datalen - ndim - 1.)
+	print 'Current best y:  ' + str(best_y) + ', with reduced chi^2: ' + str(best_chi2)
+	if best_y < alltime_best_y:
+		alltime_best_y = best_y
+		alltime_best_chi2 = best_chi2
+		alltime_best_pos = best_pos
+	print 'All-time best y: ' + str(alltime_best_y) + ', with reduced chi^2: ' + str(alltime_best_chi2)
+
+	lmh = alltime_best_pos[0]
 	mh = 10.**lmh
 	semias = [[] for _ in xrange(nobjects)]
 	taus = [[] for _ in xrange(nobjects)]
@@ -749,11 +745,29 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 		taus[i] = elements[i][3]
 		periods[i] = 2.*np.pi*np.sqrt(semias[i]**3/(G*mh))
 		perits[i] = zerot + (taus[i] - 1.)*periods[i]
-		print names[i], 'prev peri time:', perits[i]/yr
-		print names[i], 'next peri time:', (zerot + taus[i]*periods[i])/yr
+		print names[i] + ' prev peri time: ', str(perits[i]/yr) + ', next peri time: ' + str((zerot + taus[i]*periods[i])/yr)
 	#print 'Reduced chi^2:', -temp*prob[prob.argmax()]/(datalen - ndim - 1.)
-	best_chi2 = -best_prob/(datalen - ndim - 1.)
-	print 'Reduced chi^2:', best_chi2
+
+	if t < nburn:
+		replacecount = 0
+		for i, p in enumerate(prob):
+			#if (best_prob - p)/temp > zstretch*np.log(nwalkers + 2.0):
+			#print (best_prob - p)/temp, (np.log(zstretch)*(ndim - 1.) + np.log(nwalkers))
+			if (-alltime_best_y - p)/temp > (np.log(zstretch)*(ndim - 1.) + np.log(nwalkers)):
+				replacecount += 1
+				#print 'replacing bad walker:', i, p
+				#pos[i] = perturb(best_pos, 0.01)
+				coin = np.random.rand()
+				if coin > 0.5 or t == 1:
+					ni = np.random.randint(nwalkers)
+					pos[i] = pos[ni]
+					prob[i] = prob[ni]
+				else:
+					pos[i] = alltime_best_pos
+					prob[i] = -alltime_best_y
+		print 'Replaced', replacecount, 'walkers (', 100.*float(replacecount)/float(nwalkers), '%)'
+	#outstr = ', '.join(map(str,np.around(best_pos,5)))
+	np.savetxt(sys.stdout, best_pos[None], '%.3e')
 
 pool.close()
 dp = 0.00025
@@ -768,22 +782,22 @@ lgcolors = [(0.5,0.5,0.75),(0.5,0.75,0.5),(0.75,0.75,0.5)]
 if pool.is_master():
 	if args.dataset == 'sch':
 		f = open('sch.scores', 'a', os.O_NONBLOCK)
-		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
+		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
 		f.flush()
 		fname = 'pos.sch'+str(args.id)+'.out'
 	elif args.dataset == 'yel':
 		f = open('yel.scores', 'a', os.O_NONBLOCK)
-		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
+		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
 		f.flush()
 		fname = 'pos.yel'+str(args.id)+'.out'
 	elif args.dataset == 'lu':
 		f = open('lu.scores', 'a', os.O_NONBLOCK)
-		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
+		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
 		f.flush()
 		fname = 'pos.lu'+str(args.id)+'.out'
 	elif args.dataset == 'do':
 		f = open('do.scores', 'a', os.O_NONBLOCK)
-		f.write(str(args.id) + ' ' + str(best_y) + ' ' + str(best_chi2) + '\n')
+		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
 		f.flush()
 		fname = 'pos.do'+str(args.id)+'.out'
 	else:
@@ -794,12 +808,15 @@ if pool.is_master():
 	np.savetxt(f_handle, prob)
 	f_handle.close()
 
-	obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, varia, False, 0, True)
+	#obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, varia, False, 0, True)
+	obj_func(alltime_best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)
 
 	orbtimes = [[] for _ in xrange(nobjects)]
 	orbtimes2 = [[] for _ in xrange(nobjects)]
 	orbpos = [[] for _ in xrange(nobjects)]
 	orbvel = [[] for _ in xrange(nobjects)]
+	lmh = alltime_best_pos[0]
+	mh = 10.**lmh
 	kes = get_star_ke(elements, lmh)
 	for i, e in enumerate(elements):
 		orbtimes[i] = np.arange(0., 1. + dp, dp)*periods[i] + taus[i]*periods[i]
@@ -855,7 +872,8 @@ if pool.is_master():
 	print 'Done with ensemble'
 
 	# Set globals back to best solution
-	obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, varia, False, 0, True)
+	#obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, varia, False, 0, True)
+	obj_func(alltime_best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)
 
 	mpl.rcParams.update({'font.size': 16})
 
