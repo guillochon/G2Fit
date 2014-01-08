@@ -59,7 +59,7 @@ def chunks(l, n):
 	return np.array([l[i:i+n] for i in range(0, len(l), n)])
 
 def obj_func(x, times, types, measurements, errors, objects, coords, varia, prior, mode, save):
-	global vecs, vecs2, temp, elements, variances, mhx, mhy, mhz, mhvx, mhvy, mhvz, lmh
+	global vecs, vecs2, temp, elements, variances
 	lmh =  x[0]
 	mhz =  x[1]
 	variances = x[2:nvaria+2]
@@ -230,7 +230,7 @@ if args.nsteps == -1:
 else:
 	nsteps = args.nsteps
 nburn = nsteps/2
-t0 = 1.e4
+t0 = 1.e3
 
 # Constants and units
 pq.set_default_units('cgs')
@@ -703,38 +703,13 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 	pos, prob, state = result
 
 	temp = temp*(1.0/t0)**(1.0/nburn)
-	#prob = prob/(1.0/t0)**(1.0/nsteps)
-	#prob = np.array([obj_func(x, times, types, measurements, errors, objects, coords, varia, 1, False) for x in pos])
-
-	mhx =  x[nvaria+1:5*ncoords+nvaria+1:5]
-	mhy =  x[nvaria+2:5*ncoords+nvaria+1:5]
-	mhvx = x[nvaria+3:5*ncoords+nvaria+1:5]
-	mhvy = x[nvaria+4:5*ncoords+nvaria+1:5]
-	mhvz = x[nvaria+5:5*ncoords+nvaria+1:5]
-	mhz =  x[5*ncoords+nvaria+1]
-
-	# Only works if all objects are full
-	#for p, pro in enumerate(prob):
-	#	for i, xx in enumerate(x[5*ncoords+3:]):
-	#		mi = np.mod(i, 6)
-	#		if mi == 2 or mi == 4 or mi == 5:
-	#			x[5*ncoords+3+i] = np.mod(x[5*coords+3+i], 360.)
 
 	best_probi = prob.argmax()
-	best_prob = prob[best_probi]
+	best_y = -prob[best_probi]
 	best_pos = pos[best_probi]
-	best_y = -best_prob
-	best_prob = obj_func(best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)
+	best_chi2 = -obj_func(best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)/(datalen - ndim - 1.)
 
-	best_chi2 = -best_prob/(datalen - ndim - 1.)
-	print 'Current best y:  ' + str(best_y) + ', with reduced chi^2: ' + str(best_chi2)
-	if best_y < alltime_best_y:
-		alltime_best_y = best_y
-		alltime_best_chi2 = best_chi2
-		alltime_best_pos = best_pos
-	print 'All-time best y: ' + str(alltime_best_y) + ', with reduced chi^2: ' + str(alltime_best_chi2)
-
-	lmh = alltime_best_pos[0]
+	lmh = best_pos[0]
 	mh = 10.**lmh
 	semias = [[] for _ in xrange(nobjects)]
 	taus = [[] for _ in xrange(nobjects)]
@@ -746,27 +721,31 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 		periods[i] = 2.*np.pi*np.sqrt(semias[i]**3/(G*mh))
 		perits[i] = zerot + (taus[i] - 1.)*periods[i]
 		print names[i] + ' prev peri time: ', str(perits[i]/yr) + ', next peri time: ' + str((zerot + taus[i]*periods[i])/yr)
-	#print 'Reduced chi^2:', -temp*prob[prob.argmax()]/(datalen - ndim - 1.)
+
+	print 'Current best y:  ' + str(best_y) + ', with reduced chi^2: ' + str(best_chi2)
+	if best_y < alltime_best_y:
+		alltime_best_y = best_y
+		alltime_best_chi2 = best_chi2
+		alltime_best_pos = best_pos
+	print 'All-time best y: ' + str(alltime_best_y) + ', with reduced chi^2: ' + str(alltime_best_chi2)
 
 	if t < nburn:
 		replacecount = 0
 		for i, p in enumerate(prob):
-			#if (best_prob - p)/temp > zstretch*np.log(nwalkers + 2.0):
-			#print (best_prob - p)/temp, (np.log(zstretch)*(ndim - 1.) + np.log(nwalkers))
 			if (-alltime_best_y - p)/temp > (np.log(zstretch)*(ndim - 1.) + np.log(nwalkers)):
 				replacecount += 1
 				#print 'replacing bad walker:', i, p
-				#pos[i] = perturb(best_pos, 0.01)
 				coin = np.random.rand()
 				if coin > 0.5 or t == 1:
 					ni = np.random.randint(nwalkers)
 					pos[i] = pos[ni]
 					prob[i] = prob[ni]
 				else:
+					# Not recalculating prob, but very tiny perturbations.
+					#pos[i] = perturb(alltime_best_pos, 0.0001)
 					pos[i] = alltime_best_pos
 					prob[i] = -alltime_best_y
 		print 'Replaced', replacecount, 'walkers (', 100.*float(replacecount)/float(nwalkers), '%)'
-	#outstr = ', '.join(map(str,np.around(best_pos,5)))
 	np.savetxt(sys.stdout, best_pos[None], '%.3e')
 
 pool.close()
@@ -811,14 +790,25 @@ if pool.is_master():
 	#obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, varia, False, 0, True)
 	obj_func(alltime_best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)
 
+	# Save all-time best info
+	at_lmh  = alltime_best_pos[0]
+	at_mhz  = alltime_best_pos[1]
+	at_mhx  = alltime_best_pos[nvaria+2:5*ncoords+nvaria+2:5]
+	at_mhy  = alltime_best_pos[nvaria+3:5*ncoords+nvaria+2:5]
+	at_mhvx = alltime_best_pos[nvaria+4:5*ncoords+nvaria+2:5]
+	at_mhvy = alltime_best_pos[nvaria+5:5*ncoords+nvaria+2:5]
+	at_mhvz = alltime_best_pos[nvaria+6:5*ncoords+nvaria+2:5]
+	at_elements = elements
+	at_variances = variances
+	at_vecs = vecs
+
 	orbtimes = [[] for _ in xrange(nobjects)]
 	orbtimes2 = [[] for _ in xrange(nobjects)]
 	orbpos = [[] for _ in xrange(nobjects)]
 	orbvel = [[] for _ in xrange(nobjects)]
-	lmh = alltime_best_pos[0]
-	mh = 10.**lmh
-	kes = get_star_ke(elements, lmh)
-	for i, e in enumerate(elements):
+
+	kes = get_star_ke(at_elements, at_lmh)
+	for i, e in enumerate(at_elements):
 		orbtimes[i] = np.arange(0., 1. + dp, dp)*periods[i] + taus[i]*periods[i]
 		orbpos[i] = kes[i].xyzPos(orbtimes[i])*impc
 		orbtimes[i] = (perits[i] + orbtimes[i] - taus[i]*periods[i])/yr
@@ -837,15 +827,15 @@ if pool.is_master():
 		gi = objects[t]
 		ci = coords[t]
 		if types[t] == 'pxy':
-			posx[gi].extend((vecs[t][:,0] - 2.*mhz*np.tan(mhx[ci]*iasec) - mhvx[ci]*km*stimes)*impc)
-			posy[gi].extend((vecs[t][:,1] - 2.*mhz*np.tan(mhy[ci]*iasec) - mhvy[ci]*km*stimes)*impc)
+			posx[gi].extend((at_vecs[t][:,0] - 2.*at_mhz*np.tan(at_mhx[ci]*iasec) - at_mhvx[ci]*km*stimes)*impc)
+			posy[gi].extend((at_vecs[t][:,1] - 2.*at_mhz*np.tan(at_mhy[ci]*iasec) - at_mhvy[ci]*km*stimes)*impc)
 		elif types[t] =='vxy':
 			pltt[gi].extend((zerot + stimes)/yr)
-			velx[gi].extend(vecs[t][:,0]*ikm - mhvx[ci])
-			vely[gi].extend(vecs[t][:,1]*ikm - mhvy[ci])
+			velx[gi].extend(at_vecs[t][:,0]*ikm - at_mhvx[ci])
+			vely[gi].extend(at_vecs[t][:,1]*ikm - at_mhvy[ci])
 		elif types[t] =='vz':
 			pltt[gi].extend((zerot + stimes)/yr)
-			velz[gi].extend(-(vecs[t]*ikm - mhvz[ci])) # Flip sign back to match convention
+			velz[gi].extend(-(at_vecs[t]*ikm - at_mhvz[ci])) # Flip sign back to match convention
 
 	#Now do ensemble stuff
 	print 'Assembling ensemble'
@@ -853,8 +843,7 @@ if pool.is_master():
 	ensemblevels = np.zeros(shape=(nwalkers,nobjects,len(ensembletimes),3))
 	for w in xrange(nwalkers):
 		obj_func(pos[w], times, types, measurements, errors, objects, coords, varia, False, 2, False)
-		lmh = pos[w,0]
-		kes = get_star_ke(elements, lmh)
+		kes = get_star_ke(elements, pos[w,0])
 		for i, e in enumerate(elements):
 			ensemblevels[w,i,:,:] = -kes[i].xyzVel(ensembletimes*yr - zerot)*ikm
 
@@ -870,10 +859,6 @@ if pool.is_master():
 			velzmaxvec[g,t] = ensemblevels[psig,g,t,2]
 			print msig, psig, ensemblevels[msig,g,t,2], ensemblevels[psig,g,t,2]
 	print 'Done with ensemble'
-
-	# Set globals back to best solution
-	#obj_func(pos[prob.argmax()], times, types, measurements, errors, objects, coords, varia, False, 0, True)
-	obj_func(alltime_best_pos, times, types, measurements, errors, objects, coords, varia, False, 0, True)
 
 	mpl.rcParams.update({'font.size': 16})
 
@@ -933,23 +918,23 @@ if pool.is_master():
 		var = varia[m]
 
 		if typ == 'pxy':
-			x = (mhz*mea[:,0] - 2.*mhz*np.tan(mhx[coo]*iasec) - mhvx[coo]*km*(tim - zerot))*impc
-			y = (mhz*mea[:,1] - 2.*mhz*np.tan(mhy[coo]*iasec) - mhvy[coo]*km*(tim - zerot))*impc
+			x = (at_mhz*mea[:,0] - 2.*at_mhz*np.tan(at_mhx[coo]*iasec) - at_mhvx[coo]*km*(tim - zerot))*impc
+			y = (at_mhz*mea[:,1] - 2.*at_mhz*np.tan(at_mhy[coo]*iasec) - at_mhvy[coo]*km*(tim - zerot))*impc
 
 			if var != -1:
-				variancepxy2 = variances[var]**2
+				variancepxy2 = at_variances[var]**2
 			else:
 				variancepxy2 = 0.
 
-			u = mhz*np.sqrt(err[:,0]**2 + variancepxy2)*impc
-			v = mhz*np.sqrt(err[:,1]**2 + variancepxy2)*impc
+			u = at_mhz*np.sqrt(err[:,0]**2 + variancepxy2)*impc
+			v = at_mhz*np.sqrt(err[:,1]**2 + variancepxy2)*impc
 
 			posplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		elif typ == 'vz':
-			y = -(mea[:,0]*ikm - mhvz[coo]) # Flip sign back to match convention
+			y = -(mea[:,0]*ikm - at_mhvz[coo]) # Flip sign back to match convention
 
 			if var != -1:
-				variancevz2 = variances[var]**2
+				variancevz2 = at_variances[var]**2
 			else:
 				variancevz2 = 0.
 
@@ -958,10 +943,10 @@ if pool.is_master():
 			velzplt.errorbar(tim/yr, y, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		elif typ == 'vxy':
 			#pass
-			x = mhz*mea[:,0]*ikm - mhvx[coo]
-			y = mhz*mea[:,1]*ikm - mhvy[coo]
-			u = mhz*err[:,0]*ikm
-			v = mhz*err[:,1]*ikm
+			x = at_mhz*mea[:,0]*ikm - at_mhvx[coo]
+			y = at_mhz*mea[:,1]*ikm - at_mhvy[coo]
+			u = at_mhz*err[:,0]*ikm
+			v = at_mhz*err[:,1]*ikm
 
 			velxyplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		else:
