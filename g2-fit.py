@@ -727,16 +727,16 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 			if (-alltime_best_y - p)/temp > (np.log(zstretch)*(ndim - 1.) + np.log(nwalkers)):
 				replacecount += 1
 				#print 'replacing bad walker:', i, p
-				coin = np.random.rand()
-				if coin > 0.5 or t == 1:
-					ni = np.random.randint(nwalkers)
-					pos[i] = pos[ni]
-					prob[i] = prob[ni]
-				else:
-					# Not recalculating prob, but very tiny perturbations.
-					#pos[i] = perturb(alltime_best_pos, 0.0001)
-					pos[i] = alltime_best_pos
-					prob[i] = -alltime_best_y
+				#coin = np.random.rand()
+				#if coin > 0.5 or t == 1:
+				ni = np.random.randint(nwalkers)
+				pos[i] = pos[ni]
+				prob[i] = prob[ni]
+				#else:
+				#	# Not recalculating prob, but very tiny perturbations.
+				#	#pos[i] = perturb(alltime_best_pos, 0.0001)
+				#	pos[i] = alltime_best_pos
+				#	prob[i] = -alltime_best_y
 		print 'Replaced', replacecount, 'walkers (', 100.*float(replacecount)/float(nwalkers), '%)'
 	np.savetxt(sys.stdout, best_pos[None], '%.3e')
 
@@ -746,7 +746,7 @@ velztmin = 2000.
 velztmax = 2020.
 velzvmin = -4000.
 velzvmax = 4000.
-velzdt = 0.025
+velzdt = 0.01
 gcolors = ['b','g','y']
 lgcolors = [(0.5,0.5,0.75),(0.5,0.75,0.5),(0.75,0.75,0.5)]
 
@@ -846,8 +846,8 @@ if pool.is_master():
 	ensemblevels = np.zeros(shape=(nwalkers,nobjects,len(ensembletimes),3))
 	for w in xrange(nwalkers):
 		obj_func(pos[w], times, types, measurements, errors, objects, coords, varia, False, 2, False)
-		for i, e in enumerate(elements):
-			ensemblevels[w,i,:,:] = -kes[i].xyzVel(ensembletimes*yr - zerot)*ikm
+		for i, k in enumerate(kes):
+			ensemblevels[w,i,:,:] = -k.xyzVel(ensembletimes*yr - zerot)*ikm
 
 	velzminvec = np.zeros(shape=(nobjects,len(ensembletimes)))
 	velzmaxvec = np.zeros(shape=(nobjects,len(ensembletimes)))
