@@ -46,11 +46,11 @@ def get_star_ke(elements, lmh):
 	ret = [[] for _ in xrange(elements.shape[0])]
 
 	for i, e in enumerate(elements):
-		a = e[0]
+		a = abs(e[0])
 		mh = 10.**lmh
-		loce = 1. - 10.**e[1]
+		loce = 1. - 10.**min(e[1],0.)
 		period = 2.*np.pi*np.sqrt(a**3/(G*mh))
-		loctau = e[3]*period
+		loctau = max(min(e[3],1.),0.)*period
 		ret[i] = pyasl.KeplerEllipse(a, period, e=loce, Omega=e[2], tau=loctau, w=e[4], i=e[5])
 
 	return ret
@@ -59,30 +59,17 @@ def chunks(l, n):
 	return np.array([l[i:i+n] for i in range(0, len(l), n)])
 
 def obj_func(x, times, types, measurements, errors, objects, coords, varia, prior, mode, save):
-	global vecs, vecs2, temp, elements, variances
+	global vecs, vecs2, temp, elements, variances, kes
 	lmh =  x[0]
 	mhz =  x[1]
 	variances = x[2:nvaria+2]
-	if min(variances) < 0: return float("-inf")
+
 	mhx =  x[nvaria+2:5*ncoords+nvaria+2:5]
 	mhy =  x[nvaria+3:5*ncoords+nvaria+2:5]
 	mhvx = x[nvaria+4:5*ncoords+nvaria+2:5]
 	mhvy = x[nvaria+5:5*ncoords+nvaria+2:5]
 	mhvz = x[nvaria+6:5*ncoords+nvaria+2:5]
 	elements = chunks(x[5*ncoords+nvaria+2:], 6)
-
-	#print lmh
-	#print mhz
-	#print variances
-	#print mhx
-	#print mhy
-	#print mhvx
-	#print mhvy
-	#print mhvz
-	#print elements
-	#sys.exit(0)
-
-	mh = 10.**lmh
 
 	if nobjects >= 3:
 		# Hacky, third object has restricted parameters depending on object 2.
@@ -98,13 +85,7 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 				# For floating w
 				elements[2] = [elements[2][0],elements[2][1],0.,0.,elements[2][2],0.]
 
-	for i, e in enumerate(elements):
-		if e[0] < 1.e13: return float("-inf")
-		if e[1] > 0.: return float("-inf")
-		if e[2] > 360. or e[2] < 0.: return float("-inf")
-		if e[3] < 0. or e[3] > 1.: return float("-inf")
-		if e[4] > 360. or e[4] < 0.: return float("-inf")
-		if e[5] > 360. or e[5] < 0.: return float("-inf")
+	mh = 10.**lmh
 
 	if nobjects >= 3:
 		a1 = elements[1][0]
@@ -131,11 +112,22 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 			if elements[2][4] > elements[1][4]: return float("-inf")
 		elements[2][5] = elements[1][5]
 
+	kes = get_star_ke(elements, lmh)
+
+	# All globals except vecs/vecs2 should be calculated before premature returns
+	if min(variances) < 0: return float("-inf")
+
+	for i, e in enumerate(elements):
+		if e[0] < 1.e13: return float("-inf")
+		if e[1] > 0.: return float("-inf")
+		if e[2] > 360. or e[2] < 0.: return float("-inf")
+		if e[3] < 0. or e[3] > 1.: return float("-inf")
+		if e[4] > 360. or e[4] < 0.: return float("-inf")
+		if e[5] > 360. or e[5] < 0.: return float("-inf")
+
 	# Skip obj func calculation in this mode
 	if mode == 2:
 		return float("-inf")
-
-	kes = get_star_ke(elements, lmh)
 
 	val = 0.
 	vecs = [[] for _ in xrange(times.shape[0])]
@@ -211,7 +203,7 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 
 	return -0.5*val + pval#/temp
 
-global temp, elements, vecs, vecs2, variances
+global temp, elements, vecs, vecs2, variances, kes
 
 # Some options to toggle
 rpmax = 1.e300
@@ -230,7 +222,7 @@ if args.nsteps == -1:
 else:
 	nsteps = args.nsteps
 nburn = nsteps/2
-t0 = 1.e3
+t0 = 1.e4
 
 # Constants and units
 pq.set_default_units('cgs')
@@ -801,20 +793,31 @@ if pool.is_master():
 	at_elements = elements
 	at_variances = variances
 	at_vecs = vecs
+	at_mh = 10.**at_lmh
+	at_kes = get_star_ke(at_elements, at_lmh)
 
+	# Generate full orbital paths
 	orbtimes = [[] for _ in xrange(nobjects)]
 	orbtimes2 = [[] for _ in xrange(nobjects)]
 	orbpos = [[] for _ in xrange(nobjects)]
 	orbvel = [[] for _ in xrange(nobjects)]
+	semias = [[] for _ in xrange(nobjects)]
+	taus = [[] for _ in xrange(nobjects)]
+	periods = [[] for _ in xrange(nobjects)]
+	perits = [[] for _ in xrange(nobjects)]
+	for i, e in enumerate(at_elements):
+		semias[i] = at_elements[i][0]
+		taus[i] = at_elements[i][3]
+		periods[i] = 2.*np.pi*np.sqrt(semias[i]**3/(G*at_mh))
+		perits[i] = zerot + (taus[i] - 1.)*periods[i]
 
-	kes = get_star_ke(at_elements, at_lmh)
 	for i, e in enumerate(at_elements):
 		orbtimes[i] = np.arange(0., 1. + dp, dp)*periods[i] + taus[i]*periods[i]
-		orbpos[i] = kes[i].xyzPos(orbtimes[i])*impc
+		orbpos[i] = at_kes[i].xyzPos(orbtimes[i])*impc
 		orbtimes[i] = (perits[i] + orbtimes[i] - taus[i]*periods[i])/yr
 
 		orbtimes2[i] = np.arange(0., 4. + dp, dp)*periods[i] + taus[i]*periods[i]
-		orbvel[i] = -kes[i].xyzVel(orbtimes2[i])*ikm
+		orbvel[i] = -at_kes[i].xyzVel(orbtimes2[i])*ikm
 		orbtimes2[i] = (perits[i] + orbtimes2[i] - taus[i]*periods[i])/yr
 
 	posx = [[] for _ in xrange(nobjects)]
@@ -843,7 +846,6 @@ if pool.is_master():
 	ensemblevels = np.zeros(shape=(nwalkers,nobjects,len(ensembletimes),3))
 	for w in xrange(nwalkers):
 		obj_func(pos[w], times, types, measurements, errors, objects, coords, varia, False, 2, False)
-		kes = get_star_ke(elements, pos[w,0])
 		for i, e in enumerate(elements):
 			ensemblevels[w,i,:,:] = -kes[i].xyzVel(ensembletimes*yr - zerot)*ikm
 
@@ -876,7 +878,7 @@ if pool.is_master():
 		posplt.plot(posx[g], posy[g], gcolors[g]+'o')
 		posplt.plot(orbpos[g][:,0], orbpos[g][:,1], gcolors[g]+'-')
 
-		if (g <= 1):
+		if g <= 1 or args.dataset == 'lu' or args.dataset == 'do':
 			#velz = [xx for (yy,xx) in sorted(zip(pltt,velz))]
 			#pltt = [xx for (yy,xx) in sorted(zip(pltt,pltt))]
 			velzplt.plot(pltt[g], velz[g], gcolors[g]+'o')
@@ -885,7 +887,7 @@ if pool.is_master():
 		#np.set_printoptions(threshold='nan')
 		#print orbtimes[i], orbvel[g][:,2]
 
-		if (g == 2):
+		if g == 2:
 			velxyplt.plot(velx[g], vely[g], gcolors[g]+'o')
 
 	velzplt.set_xlim(velztmin, velztmax)
