@@ -16,15 +16,16 @@ from PyAstronomy import pyasl
 import argparse
 
 parser = argparse.ArgumentParser(description="Fit G2's orbit.")
-parser.add_argument('--samerp',           dest='samerp',    help='G2 and Candidate forced to have same rp', 					default=False, action='store_true')
-parser.add_argument('--samew',            dest='samew',     help='G2 and Candidate forced to have same w',  					default=False, action='store_true')
-parser.add_argument('--noproprec',        dest='noproprec', help='Candidate not allowed to precess prograde relative to G2',  default=False, action='store_true')
-parser.add_argument('--prior',            dest='prior',     help='Use prior for Sgr A* properties',                     default=False, action='store_true')
-parser.add_argument('--dataset',          dest='dataset',   help='Dataset name',                                        default='',    type=str)
-parser.add_argument('--id',               dest='id',        help='ID of star in dataset',  				                default=-1,    type=int)
-parser.add_argument('--nwalkers',         dest='nwalkers',  help='Number of walkers',  				                    default=-1,    type=int)
-parser.add_argument('--nsteps',           dest='nsteps',    help='Number of steps',  				                    default=-1,    type=int)
-parser.add_argument('--inputs',           dest='inputs',    help='Which data to use for S2/G2',  			            default=-1,    type=int)
+parser.add_argument('--samerp',           dest='samerp',    help='G2 and Candidate forced to have same rp', 				 default=False,      action='store_true')
+parser.add_argument('--samew',            dest='samew',     help='G2 and Candidate forced to have same w',  				 default=False,      action='store_true')
+parser.add_argument('--noproprec',        dest='noproprec', help='Candidate not allowed to precess prograde relative to G2', default=False,      action='store_true')
+parser.add_argument('--prior',            dest='prior',     help='Use prior for Sgr A* properties',                          default=False,      action='store_true')
+parser.add_argument('--dataset',          dest='dataset',   help='Dataset name',                                             default='',         type=str)
+parser.add_argument('--id',               dest='id',        help='ID of star in dataset',  				                     default=-1,         type=int)
+parser.add_argument('--nwalkers',         dest='nwalkers',  help='Number of walkers',  				                         default=-1,         type=int)
+parser.add_argument('--nsteps',           dest='nsteps',    help='Number of steps',  				                         default=-1,         type=int)
+parser.add_argument('--inputs',           dest='inputs',    help='Which data to use for S2/G2',  			                 default=-1,         type=int)
+parser.add_argument('--units',            dest='units',     help='Output position/proper motion in physical/angular units',  default='physical', type=str)
 args = parser.parse_args()
 
 def neg_obj_func(x, ptimes, vtimes):
@@ -875,8 +876,12 @@ if pool.is_master():
 	for g in xrange(nobjects):
 		#posx = [xx for (yy,xx) in sorted(zip(pltt,posx))]
 		#posy = [xx for (yy,xx) in sorted(zip(pltt,posy))]
-		posplt.plot(posx[g], posy[g], gcolors[g]+'o')
-		posplt.plot(orbpos[g][:,0], orbpos[g][:,1], gcolors[g]+'-')
+		if args.units == 'physical'
+			posplt.plot(posx[g], posy[g], gcolors[g]+'o')
+			posplt.plot(orbpos[g][:,0], orbpos[g][:,1], gcolors[g]+'-')
+		else:
+			posplt.plot(np.atan(0.5*posx[g]*mpc/at_mhz)*asec, np.atan(0.5*posy[g]*mpc/at_mhz)*asec, gcolors[g]+'o')
+			posplt.plot(np.atan(0.5*orbpos[g][:,0]*mpc/at_mhz)*asec, np.atan(0.5*orbpos[g][:,1]*mpc/at_mhz)*asec, gcolors[g]+'-')
 
 		if g <= 1 or args.dataset == 'lu' or args.dataset == 'do':
 			#velz = [xx for (yy,xx) in sorted(zip(pltt,velz))]
@@ -888,7 +893,10 @@ if pool.is_master():
 		#print orbtimes[i], orbvel[g][:,2]
 
 		if g == 2:
-			velxyplt.plot(velx[g], vely[g], gcolors[g]+'o')
+			if args.units == 'physical':
+				velxyplt.plot(velx[g], vely[g], gcolors[g]+'o')
+			else:
+				velxyplt.plot(np.atan(velx[g]*km*yr/at_mhz)*asec, np.atan(vely[g]*km*yr/at_mhz)*asec, gcolors[g]+'o')
 
 	velzplt.set_xlim(velztmin, velztmax)
 	velzplt.set_xticks(np.arange(velztmin, velztmax, 5))
@@ -902,11 +910,16 @@ if pool.is_master():
 	velzplt.set_ylabel('$v_r$ (km/s)', fontsize=18)
 
 	posplt.invert_xaxis()
-	posplt.set_xlabel('$x$ (mpc)', fontsize=18)
-	posplt.set_ylabel('$y$ (mpc)', fontsize=18)
-
-	velxyplt.set_xlabel('$v_x$ (km/s)', fontsize=18)
-	velxyplt.set_ylabel('$v_y$ (km/s)', fontsize=18)
+	if args.units == 'physical':
+		posplt.set_xlabel('$x$ (mpc)', fontsize=18)
+		posplt.set_ylabel('$y$ (mpc)', fontsize=18)
+		velxyplt.set_xlabel('$v_x$ (km s$^{-1}$)', fontsize=18)
+		velxyplt.set_ylabel('$v_y$ (km s$^{-1}$)', fontsize=18)
+	else:
+		posplt.set_xlabel('R.A. (arcsec)', fontsize=18)
+		posplt.set_ylabel('Dec. (arcsec)', fontsize=18)
+		velxyplt.set_xlabel('R.A. Prop. Mot. (milliarcsec yr$^{-1}$)', fontsize=18)
+		velxyplt.set_ylabel('Dec. Prop. Mot. (milliarcsec yr$^{-1}$)', fontsize=18)
 
 	posplt.plot(0., 0., 'ko')
 
@@ -931,7 +944,11 @@ if pool.is_master():
 			u = at_mhz*np.sqrt(err[:,0]**2 + variancepxy2)*impc
 			v = at_mhz*np.sqrt(err[:,1]**2 + variancepxy2)*impc
 
-			posplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
+			if args.units == 'physical':
+				posplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
+			else:
+				posplt.errorbar(np.atan(x*mpc/at_mhz)*asec, np.atan(y*mpc/at_mhz)*asec,
+								xerr=np.atan(u*mpc/a_mhz)*asec, yerr=np.atan(v*mpc/at_mhz)*asec, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		elif typ == 'vz':
 			y = -(mea[:,0]*ikm - at_mhvz[coo]) # Flip sign back to match convention
 
@@ -950,7 +967,10 @@ if pool.is_master():
 			u = at_mhz*err[:,0]*ikm
 			v = at_mhz*err[:,1]*ikm
 
-			velxyplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
+			if args.units == 'physical':
+				velxyplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
+			else:
+				velxyplt.errorbar(np.atan(x*km*yr/at_mhz)*asec, np.atan(y*km*yr/at_mhz)*asec, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		else:
 			print 'Illegal measurement type'
 			sys.exit(0)
