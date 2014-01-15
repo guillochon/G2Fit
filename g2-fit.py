@@ -99,8 +99,9 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 			elements[2][1] = elements[1][1] + np.log10(a1/a2)
 		else:
 			# Allow G2 and Candidate to have different Rp, but Rp must be less than a critical value (tidal radius).
-			rp = a2*10.**elements[2][1]
-			if elements[2][1] < elements[1][1] or rp > rpmax: return float("-inf")
+			rp1 = a1*10.**elements[1][1]
+			rp2 = a2*10.**elements[2][1]
+			if rp2 < rp1 or rp2 > rpmax: return float("-inf")
 		if elements[2][1] > 0.: return float("-inf")
 		elements[2][2] = elements[1][2]
 		#elements[2][3] = elements[1][3]*period1/period2
@@ -119,7 +120,7 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 	if min(variances) < 0: return float("-inf")
 
 	for i, e in enumerate(elements):
-		if e[0] < 1.e13: return float("-inf")
+		if e[0] < 1.e13 or e[0] > 1.e20: return float("-inf")
 		if e[1] > 0.: return float("-inf")
 		if e[2] > 360. or e[2] < 0.: return float("-inf")
 		if e[3] < 0. or e[3] > 1.: return float("-inf")
@@ -240,14 +241,14 @@ ikm = 1./km
 msun = 1.9891e33
 asec = 2.*3600.*180./np.pi
 iasec = 1./asec
+masec = 1.e3*asec
+imasec = 1./masec
 
 temp = t0
 
 zscale = 2.
 zstretch = ((zscale - 1.) + 1.)**2/zscale
 	
-nvaria = 2
-
 #cd = os.getcwd()
 #cd = '/pfs/james/g2fit'
 cd = os.path.dirname(os.path.realpath(__file__))+"/observations/"
@@ -288,6 +289,10 @@ elif args.dataset == 'do':
 		canddata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".points")
 		candvxydata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".vxy")
 		candvdata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".rv")
+elif args.dataset == 'unp':
+	canddata = np.loadtxt(cd+"unpublished/S259.points")
+	candvxydata = np.loadtxt(cd+"unpublished/S259.vxy")
+	candvdata = np.loadtxt(cd+"unpublished/S259.rv")
 else:
 	print "Invalid dataset selected"
 	sys.exit(0)
@@ -355,7 +360,7 @@ canddata[:,1:] = 2.*np.tan(canddata[:,1:]*iasec)
 candvxydata = np.reshape(candvxydata, (-1, 5))
 candvxydata[:,0] = candvxydata[:,0]*yr
 candvxydata[:,1:] = 2.*np.tan(candvxydata[:,1:]*iasec)/yr
-if args.dataset == 'lu' or args.dataset == 'do':
+if args.dataset == 'lu' or args.dataset == 'do' or args.dataset == 'unp':
 	candvdata = np.reshape(candvdata, (-1, 3))
 	candvdata[:,0] = candvdata[:,0]*yr
 	candvdata[:,1] = -candvdata[:,1]
@@ -364,16 +369,19 @@ if args.dataset == 'lu' or args.dataset == 'do':
 # Both datasets
 
 if args.inputs == 0:
-	if args.dataset == 'lu' or args.dataset == 'do':
+	if args.dataset == 'lu' or args.dataset == 'do' or args.dataset == 'unp':
 		times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0],candvdata[:,0]])
 		types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy','vz']
 		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3],candvdata[:,1:2]]
 		errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5],candvdata[:,2:3]]
 		objects = [0,0,1,1,2,0,0,1,1,2,2]
-		coords = [0,1,0,1,0,0,1,0,1,0,0]
+		if args.dataset == 'unp':
+			coords = [0,1,0,1,1,0,1,0,1,1,1]
+		else:
+			coords = [0,1,0,1,0,0,1,0,1,0,0]
 		kind = [0,0,1]
 		names = ['S2','G2','Candidate']
-		varia = [0,1,2,3,-1,-1,-1,4,5,-1,-1]
+		varia = [0,1,2,3,-1,-1,-1,4,4,-1,-1]
 	else:
 		times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0]])
 		types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy']
@@ -386,7 +394,7 @@ if args.inputs == 0:
 			coords = [0,1,0,1,0,0,1,0,1,0]
 		kind = [0,0,1]
 		names = ['S2','G2','Candidate']
-		varia = [0,1,2,3,-1,-1,-1,4,5,-1]
+		varia = [0,1,2,3,-1,-1,-1,4,4,-1]
 # Both datasets minus Candidate
 #times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0]])
 #types = ['pxy','pxy','pxy','pxy','vz','vz','vz','vz']
@@ -441,131 +449,14 @@ nobjects = len(set(objects))
 ncoords = len(set(coords))
 nvaria = len(set(varia)) - 1 #Need -1 because some have no variance
 
-#x0 = [np.array([40.,0.01,0.01,200.,8.36*kpc,0.04*pc,0.9999,360.,1.,360.,360.,0.04*pc,0.9999,360.,1.,360.,360.]) * np.random.rand(ndim) for i in xrange(nwalkers)]
-
-#x0 = em.utils.sample_ball([3.98984624e+01, 5.75930617e-03, -1.29642155e-02, -7.20738328e+00, 2.09758430e+01, 6.92943815e+00,
-#						   0.001, 0.001, 0., 0., 0.,
-#						   2.31820365e+22,
-#						   1.51184008e+16, -1.00068439e+00, 2.22895592e+02, 4.29469497e-01, 6.70875379e+01, 3.12620663e+02,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 6.24846279e+01],
-#						  [0.05,0.001,0.001,10.,10.,10.,0.001,0.001,10.,10.,10.,1*kpc,0.0005*pc,0.1,5.,0.01,5.,5.,0.1*pc,0.5,360.,0.1,360.,360.], size=nwalkers)
-#x0 = em.utils.sample_ball([3.99298621e+01, 4.50478826e-03, -1.28610303e-02, -5.16967075e+00, 2.64503308e+01, 2.78545427e+00, 2.41850038e+22,
-#						   1.53696988e+16, -9.86146230e-01, 2.21992919e+02, 4.34253060e-01, 6.70356104e+01, 3.14016468e+02,
-#						   0.04*pc,-1,360.,1.,360.,360.],
-#				  		  [0.1,0.0001,0.0001,20.,20.,20.,0.1*kpc,0.0005*pc,0.1,36.,0.1,36.,36.,0.004*pc,0.1,360.,0.1,360.,360.], size=nwalkers)
-
-# One object only
-#x0 = em.utils.sample_ball([39.9423209093, 1e+15, 0.00209107565329, 0.00217098237557, 0.837772793736, -1.45335115374, -1.57080647175, 2.61755477547e+22,
-#						   1.55338087572e+16, -0.911020170487, 44.2334977541, 0.633314082346, 243.911799883, 43.9361641325
-#						   ],
-#				  		  [0.1,0.e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,36.,0.1,36.,36.
-#						   ], size=nwalkers)
-
-# Two objects with initial decent guess
-#x0 = em.utils.sample_ball([3.99298621e+01, 4.50478826e-03, -1.28610303e-02, -5.16967075e+00, 2.64503308e+01, 2.78545427e+00, 2.41850038e+22,
-#						   1.51184008e+16, -1.00068439e+00, 2.22895592e+02, 4.29469497e-01, 6.70875379e+01, 3.12620663e+02,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 6.24846279e+01],
-#				  		  [0.1,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6], size=nwalkers)
-
-# Two objects with initial decent guess and max. likelihood
-#x0 = em.utils.sample_ball([3.99298621e+01, 4.50478826e-03, -1.28610303e-02, -5.16967075e+00, 2.64503308e+01, 2.78545427e+00, 2.41850038e+22, 
-#						   1.51184008e+16, -1.00068439e+00, 2.22895592e+02, 4.29469497e-01, 6.70875379e+01, 3.12620663e+02,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 6.24846279e+01],
-#				  		  [0.1,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6], size=nwalkers)
-
-# Two objects with initial decent guess, includes variable variance
-#x0 = em.utils.sample_ball([39.9423209093, 1.e+15, 0.00209107565329, 0.00217098237557, 0.837772793736, -1.45335115374, -1.57080647175, 2.61755477547e+22,
-#						   1.55338087572e+16, -0.911020170487, 44.2334977541, 0.633314082346, 243.911799883, 43.9361641325,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 297.5153721
-#						   ],
-#				  		  [0.1,1.e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,36.,0.1,36.,36.,
-#						   0.0004*pc,0.1,360.,0.1,360.,360.
-#						   ], size=nwalkers)
-
-# Three objects with two fixed
-#x0 = em.utils.sample_ball([3.98813163e+01,  2.72299631e-03, -1.17165691e-03, -3.57672290e+00,
-#                           -2.22465956e+00,   5.14236228e+00,   2.38341193e+22,   1.48288930e+16,
-#                           -9.49282749e-01,   2.22253841e+02,   6.32657523e-01,   6.57978526e+01,
-#                           3.14124382e+02,   1.02147631e+17,  -1.59176126e+00,   1.81207572e+02,
-#                           7.44247185e-02,   2.82886744e+02,   6.79663728e+01,
-#						   0.04*pc,0.,0.,0.,0.,0.],
-#				  		  [0.,0.,0.,0.,0.,0.,0.,
-#						   0.,0.,0.,0.,0.,0.,
-#						   0.,0.,0.,0.,0.,0.,
-#						   0.04*pc,0.,0.,0.,0.,0.], size=nwalkers)
-
-
-# Three objects with initial decent guess
-#x0 = em.utils.sample_ball([3.99298621e+01, 4.50478826e-03, -1.28610303e-02, -5.16967075e+00, 2.64503308e+01, 2.78545427e+00, 2.41850038e+22,
-#						   1.51184008e+16, -1.00068439e+00, 2.22895592e+02, 4.29469497e-01, 6.70875379e+01, 3.12620663e+02,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 6.24846279e+01,
-#						   0.04*pc,-1.,0.,0.,0.,0.],
-#				  		  [0.1,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.004*pc,0.1,0.,0.,0.,0.], size=nwalkers)
-
-# Three objects with initial decent guess, no unused free parameters, includes variable variance
-#x0 = em.utils.sample_ball([3.99298621e+01, 1.0e15, 4.50478826e-03, -1.28610303e-02, -5.16967075e+00, 2.64503308e+01, 2.78545427e+00, 2.41850038e+22,
-#						   1.51184008e+16, -1.00068439e+00, 2.22895592e+02, 4.29469497e-01, 6.70875379e+01, 3.12620663e+02,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 6.24846279e+01,
-#						   0.04*pc],
-#				  		  [0.1,1.0e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.004*pc], size=nwalkers)
-
-# Three objects with initial decent guess, rp allowed to float (but not above rt), no unused free parameters
-#x0 = em.utils.sample_ball([3.99298621e+01, 4.50478826e-03, -1.28610303e-02, -5.16967075e+00, 2.64503308e+01, 2.78545427e+00, 2.41850038e+22,
-#						   1.51184008e+16, -1.00068439e+00, 2.22895592e+02, 4.29469497e-01, 6.70875379e+01, 3.12620663e+02,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 6.24846279e+01,
-#						   0.04*pc,-3.0],
-#				  		  [0.1,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.04*pc,1.0], size=nwalkers)
-
-# Three objects with initial decent guess, rp allowed to float, no unused free parameters, includes variable variance
-#x0 = em.utils.sample_ball([39.9595606861, 1.e+15, 0.00336573644595, 0.00189323680646, -4.44312540168, -1.71856390183, 32.0694144443, 2.64426936195e+22,
-#						   1.576992696e+16, -0.907088055947, 225.398067805, 0.631748105165, 63.0430664828, 44.6995421214,
-#						   1.05126070e+17, -2.06083486e+00, 2.10324682e+02, 6.39904114e-02, 2.76476139e+02, 297.5153721,
-#						   0.04*pc,-3.0],
-#				  		  [0.1,1.0e15,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.04*pc,1.0], size=nwalkers)
-
-# Three objects with initial decent guess, rp allowed to float, w allowed to float, no unused free parameters, includes variable variance
-#x0 = em.utils.sample_ball([39.9377048586, 1.e-7, 100., 0.00259229857886, 0.00202617827851, -3.19123397664, -5.26122862936, -12.1680808296, 2.56181937951e+22,
-#						   1.55372337623e+16, -0.922512660801, 43.9219041718, 0.629817298992, 244.320447563, 45.0406570285,
-#						   1.03433664987e+17, -1.78166243609, 188.411516325, 0.0785951978784, 285.378895166, 62.9907152784,
-#						   0.04*pc,-2.,2.76476139e+02],
-#				  		  [0.1,1.e-7,100.,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.04*pc,1.0,3.6], size=nwalkers)
-
-# Three objects with initial decent guess, rp fixed, w allowed to float, no unused free parameters, includes variable variance
-#x0 = em.utils.sample_ball([39.9377048586, 1.e-7, 100., 0.00259229857886, 0.00202617827851, -3.19123397664, -5.26122862936, -12.1680808296, 2.56181937951e+22,
-#						   1.55372337623e+16, -0.922512660801, 43.9219041718, 0.629817298992, 244.320447563, 45.0406570285,
-#						   1.03433664987e+17, -1.78166243609, 188.411516325, 0.0785951978784, 285.378895166, 62.9907152784,
-#						   0.04*pc,2.76476139e+02],
-#				  		  [0.1,1.e-7,100.,0.0001,0.0001,20.,20.,20.,0.1*kpc,
-#						   0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.0004*pc,0.1,3.6,0.1,3.6,3.6,
-#						   0.04*pc,3.6], size=nwalkers)
-
 guess = [39.9584143435, 2.59384025953e+22]
 spread = [0.1,0.1*kpc]
 
+# Currently, varia must be numbered in sequential order (e.g. 1,2,2,3,3,4).
+varcnt = -1
 for i in xrange(len(types)):
-	if varia[i] != -1:
+	if varia[i] != -1 and varia[i] != varcnt:
+		varcnt = varcnt + 1
 		if types[i] == 'pxy':
 			guess.append(1.e-7)
 			spread.append(1.e-8)
@@ -670,6 +561,7 @@ x0 = em.utils.sample_ball(guess, spread, size=nwalkers)
 #	print "Prob:", prob[i]
 
 ndim = len(x0[0])
+
 if (nwalkers < 2*ndim):
 	print 'Error: Need walkers >= 2 * ndim'
 	sys.exit(0)
@@ -826,7 +718,7 @@ if pool.is_master():
 	velx = [[] for _ in xrange(nobjects)]
 	vely = [[] for _ in xrange(nobjects)]
 	velz = [[] for _ in xrange(nobjects)]
-	pltt = [[] for _ in xrange(nobjects)]
+	vzt = [[] for _ in xrange(nobjects)]
 	for t, stimes in enumerate(times):
 		gi = objects[t]
 		ci = coords[t]
@@ -834,11 +726,10 @@ if pool.is_master():
 			posx[gi].extend((at_vecs[t][:,0] - 2.*at_mhz*np.tan(at_mhx[ci]*iasec) - at_mhvx[ci]*km*stimes)*impc)
 			posy[gi].extend((at_vecs[t][:,1] - 2.*at_mhz*np.tan(at_mhy[ci]*iasec) - at_mhvy[ci]*km*stimes)*impc)
 		elif types[t] =='vxy':
-			pltt[gi].extend((zerot + stimes)/yr)
 			velx[gi].extend(at_vecs[t][:,0]*ikm - at_mhvx[ci])
 			vely[gi].extend(at_vecs[t][:,1]*ikm - at_mhvy[ci])
 		elif types[t] =='vz':
-			pltt[gi].extend((zerot + stimes)/yr)
+			vzt[gi].extend((zerot + stimes)/yr)
 			velz[gi].extend(-(at_vecs[t]*ikm - at_mhvz[ci])) # Flip sign back to match convention
 
 	#Now do ensemble stuff
@@ -874,19 +765,17 @@ if pool.is_master():
 		velzplt.fill_between(ensembletimes, velzminvec[g], velzmaxvec[g], facecolor=lgcolors[g], edgecolor='none', interpolate=True)
 
 	for g in xrange(nobjects):
-		#posx = [xx for (yy,xx) in sorted(zip(pltt,posx))]
-		#posy = [xx for (yy,xx) in sorted(zip(pltt,posy))]
-		if args.units == 'physical'
-			posplt.plot(posx[g], posy[g], gcolors[g]+'o')
+		if args.units == 'physical':
+			posplt.plot(posx[g], posy[g], gcolors[g]+'o', markersize=4)
 			posplt.plot(orbpos[g][:,0], orbpos[g][:,1], gcolors[g]+'-')
 		else:
-			posplt.plot(np.atan(0.5*posx[g]*mpc/at_mhz)*asec, np.atan(0.5*posy[g]*mpc/at_mhz)*asec, gcolors[g]+'o')
-			posplt.plot(np.atan(0.5*orbpos[g][:,0]*mpc/at_mhz)*asec, np.atan(0.5*orbpos[g][:,1]*mpc/at_mhz)*asec, gcolors[g]+'-')
+			posplt.plot(np.arctan(0.5*np.array(posx[g])*mpc/at_mhz)*asec, np.arctan(0.5*np.array(posy[g])*mpc/at_mhz)*asec, gcolors[g]+'o', markersize=4)
+			posplt.plot(np.arctan(0.5*orbpos[g][:,0]*mpc/at_mhz)*asec, np.arctan(0.5*orbpos[g][:,1]*mpc/at_mhz)*asec, gcolors[g]+'-')
 
-		if g <= 1 or args.dataset == 'lu' or args.dataset == 'do':
-			#velz = [xx for (yy,xx) in sorted(zip(pltt,velz))]
-			#pltt = [xx for (yy,xx) in sorted(zip(pltt,pltt))]
-			velzplt.plot(pltt[g], velz[g], gcolors[g]+'o')
+		if g <= 1 or args.dataset == 'lu' or args.dataset == 'do' or args.dataset == 'unp':
+			#velz = [xx for (yy,xx) in sorted(zip(vzt,velz))]
+			#vzt = [xx for (yy,xx) in sorted(zip(vzt,vzt))]
+			velzplt.plot(vzt[g], velz[g], gcolors[g]+'o', markersize=4)
 
 		velzplt.plot(orbtimes2[g], orbvel[g][:,2], gcolors[g]+'-')
 		#np.set_printoptions(threshold='nan')
@@ -894,9 +783,9 @@ if pool.is_master():
 
 		if g == 2:
 			if args.units == 'physical':
-				velxyplt.plot(velx[g], vely[g], gcolors[g]+'o')
+				velxyplt.plot(velx[g], vely[g], gcolors[g]+'o', markersize=4)
 			else:
-				velxyplt.plot(np.atan(velx[g]*km*yr/at_mhz)*asec, np.atan(vely[g]*km*yr/at_mhz)*asec, gcolors[g]+'o')
+				velxyplt.plot(np.arctan(0.5*np.array(velx[g])*km*yr/at_mhz)*masec, np.arctan(0.5*np.array(vely[g])*km*yr/at_mhz)*masec, gcolors[g]+'o')
 
 	velzplt.set_xlim(velztmin, velztmax)
 	velzplt.set_xticks(np.arange(velztmin, velztmax, 5))
@@ -907,7 +796,7 @@ if pool.is_master():
 	velzplt.yaxis.set_minor_locator(minorLocator)
 	#velzplt.ylim(min(list(flatten(velz[0:2]))), max(list(flatten(velz[0:2]))))
 	velzplt.set_xlabel('$t$ (yr)', fontsize=18)
-	velzplt.set_ylabel('$v_r$ (km/s)', fontsize=18)
+	velzplt.set_ylabel('$v_r$ (km s$^{-1}$)', fontsize=18)
 
 	posplt.invert_xaxis()
 	if args.units == 'physical':
@@ -922,6 +811,9 @@ if pool.is_master():
 		velxyplt.set_ylabel('Dec. Prop. Mot. (milliarcsec yr$^{-1}$)', fontsize=18)
 
 	posplt.plot(0., 0., 'ko')
+
+	posplt.margins(0.1, tight=False)
+	velxyplt.margins(0.1, tight=False)
 
 	for m, mea in enumerate(measurements):
 		tim = times[m] + zerot
@@ -947,8 +839,8 @@ if pool.is_master():
 			if args.units == 'physical':
 				posplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 			else:
-				posplt.errorbar(np.atan(x*mpc/at_mhz)*asec, np.atan(y*mpc/at_mhz)*asec,
-								xerr=np.atan(u*mpc/a_mhz)*asec, yerr=np.atan(v*mpc/at_mhz)*asec, elinewidth=1, linewidth=0, fmt=gcolors[obj])
+				posplt.errorbar(np.arctan(0.5*x*mpc/at_mhz)*asec, np.arctan(0.5*y*mpc/at_mhz)*asec,
+								xerr=np.arctan(0.5*u*mpc/at_mhz)*asec, yerr=np.arctan(0.5*v*mpc/at_mhz)*asec, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		elif typ == 'vz':
 			y = -(mea[:,0]*ikm - at_mhvz[coo]) # Flip sign back to match convention
 
@@ -970,7 +862,9 @@ if pool.is_master():
 			if args.units == 'physical':
 				velxyplt.errorbar(x, y, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
 			else:
-				velxyplt.errorbar(np.atan(x*km*yr/at_mhz)*asec, np.atan(y*km*yr/at_mhz)*asec, xerr=u, yerr=v, elinewidth=1, linewidth=0, fmt=gcolors[obj])
+				velxyplt.errorbar(np.arctan(0.5*x*km*yr/at_mhz)*masec, np.arctan(0.5*y*km*yr/at_mhz)*masec,
+							      xerr=np.arctan(0.5*u*km*yr/at_mhz)*masec, yerr=np.arctan(0.5*v*km*yr/at_mhz)*masec,
+								  elinewidth=1, linewidth=0, fmt=gcolors[obj])
 		else:
 			print 'Illegal measurement type'
 			sys.exit(0)
