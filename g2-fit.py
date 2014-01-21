@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser(description="Fit G2's orbit.")
 parser.add_argument('--samerp',           dest='samerp',    help='G2 and Candidate forced to have same rp', 				 default=False,      action='store_true')
 parser.add_argument('--samew',            dest='samew',     help='G2 and Candidate forced to have same w',  				 default=False,      action='store_true')
 parser.add_argument('--noproprec',        dest='noproprec', help='Candidate not allowed to precess prograde relative to G2', default=False,      action='store_true')
+parser.add_argument('--preclim',          dest='preclim',   help='Candidate cannot precess more than this many degrees',     default=-1.,        type=float)
 parser.add_argument('--prior',            dest='prior',     help='Use prior for Sgr A* properties',                          default=False,      action='store_true')
 parser.add_argument('--dataset',          dest='dataset',   help='Dataset name',                                             default='',         type=str)
 parser.add_argument('--id',               dest='id',        help='ID of star in dataset',  				                     default=-1,         type=int)
@@ -26,6 +27,7 @@ parser.add_argument('--nwalkers',         dest='nwalkers',  help='Number of walk
 parser.add_argument('--nsteps',           dest='nsteps',    help='Number of steps',  				                         default=-1,         type=int)
 parser.add_argument('--inputs',           dest='inputs',    help='Which data to use for S2/G2',  			                 default=-1,         type=int)
 parser.add_argument('--units',            dest='units',     help='Output position/proper motion in physical/angular units',  default='physical', type=str)
+parser.add_argument('--label',            dest='label',     help='Additional filename label',                                default='',         type=str)
 args = parser.parse_args()
 
 def neg_obj_func(x, ptimes, vtimes):
@@ -58,6 +60,9 @@ def get_star_ke(elements, lmh):
 
 def chunks(l, n):
 	return np.array([l[i:i+n] for i in range(0, len(l), n)])
+
+def prior_func(x):
+	return 0.
 
 def obj_func(x, times, types, measurements, errors, objects, coords, varia, prior, mode, save):
 	global vecs, vecs2, temp, elements, variances, kes
@@ -109,9 +114,12 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 		#elements[2][3] = (1. - (1.-elements[1][3])*period1/period2)
 		if args.samew:
 			elements[2][4] = elements[1][4]
-		elif args.noproprec:
-			# Retrograde precession only, GR won't be important
-			if elements[2][4] > elements[1][4]: return float("-inf")
+		else:
+			if args.noproprec:
+				# Retrograde precession only, GR won't be important
+				if elements[2][4] > elements[1][4]: return float("-inf")
+			if args.preclim > 0.:
+				if np.abs(elements[2][4] - elements[1][4]) > args.preclim: return float("-inf")
 		elements[2][5] = elements[1][5]
 
 	kes = get_star_ke(elements, lmh)
@@ -266,33 +274,46 @@ g2vdata2 = np.loadtxt(cd+"gillessen-2013/G2.rv")
 if args.dataset == 'sch':
 	if args.id == -1:
 		args.id = 20
-	else:
-		canddata = np.loadtxt(cd+"schoedel-2009/Sch"+str(args.id)+".points")
-		candvxydata = np.loadtxt(cd+"schoedel-2009/Sch"+str(args.id)+".vxy")
+	canddata = np.loadtxt(cd+"schoedel-2009/Sch"+str(args.id)+".points")
+	candvxydata = np.loadtxt(cd+"schoedel-2009/Sch"+str(args.id)+".vxy")
+	candcoorxy = 1
+	candcoorz  = 1
 elif args.dataset == 'yel':
 	if args.id == -1:
 		args.id = 20
-	else:
-		canddata = np.loadtxt(cd+"yelda-2010/Yelda"+str(args.id)+".points")
-		candvxydata = np.loadtxt(cd+"yelda-2010/Yelda"+str(args.id)+".vxy")
+	canddata = np.loadtxt(cd+"yelda-2010/Yelda"+str(args.id)+".points")
+	candvxydata = np.loadtxt(cd+"yelda-2010/Yelda"+str(args.id)+".vxy")
+	candcoorxy = 0
+	candcoorz  = 0
 elif args.dataset == 'lu':
 	if args.id == -1:
 		args.id = 1
-	else:
-		canddata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".points")
-		candvxydata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".vxy")
-		candvdata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".rv")
+	canddata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".points")
+	candvxydata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".vxy")
+	candvdata = np.loadtxt(cd+"lu-2009/Lu"+str(args.id)+".rv")
+	candcoorxy = 0
+	candcoorz  = 0
 elif args.dataset == 'do':
 	if args.id == -1:
 		args.id = 1
-	else:
-		canddata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".points")
-		candvxydata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".vxy")
-		candvdata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".rv")
+	canddata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".points")
+	candvxydata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".vxy")
+	candvdata = np.loadtxt(cd+"do-2013/Do"+str(args.id)+".rv")
+	candcoorxy = 0
+	candcoorz  = 0
 elif args.dataset == 'unp':
-	canddata = np.loadtxt(cd+"unpublished/S259.points")
-	candvxydata = np.loadtxt(cd+"unpublished/S259.vxy")
-	candvdata = np.loadtxt(cd+"unpublished/S259.rv")
+	if args.id == 1:
+		canddata = np.loadtxt(cd+"unpublished/S259.points")
+		candvxydata = np.loadtxt(cd+"unpublished/S259.vxy")
+		candvdata = np.loadtxt(cd+"unpublished/S259.rv")
+		candcoorxy = 1
+		candcoorz  = 1
+	elif args.id == 2:
+		canddata = np.loadtxt(cd+"yelda-2010/Yelda126.points")
+		candvxydata = np.loadtxt(cd+"yelda-2010/Yelda126.vxy")
+		candvdata = np.loadtxt(cd+"unpublished/S2-84.rv")
+		candcoorxy = 0
+		candcoorz  = 1
 else:
 	print "Invalid dataset selected"
 	sys.exit(0)
@@ -375,10 +396,7 @@ if args.inputs == 0:
 		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3],candvdata[:,1:2]]
 		errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5],candvdata[:,2:3]]
 		objects = [0,0,1,1,2,0,0,1,1,2,2]
-		if args.dataset == 'unp':
-			coords = [0,1,0,1,1,0,1,0,1,1,1]
-		else:
-			coords = [0,1,0,1,0,0,1,0,1,0,0]
+		coords = [0,1,0,1,candcoorxy,0,1,0,1,0,candcoorz]
 		kind = [0,0,1]
 		names = ['S2','G2','Candidate']
 		varia = [0,1,2,3,-1,-1,-1,4,4,-1,-1]
@@ -388,10 +406,7 @@ if args.inputs == 0:
 		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3]]
 		errors = [s2data[:,3:5],s2data2[:,3:5],g2data[:,3:5],g2data2[:,3:5],canddata[:,3:5],s2vdata[:,2:3],s2vdata2[:,2:3],g2vdata[:,2:3],g2vdata2[:,2:3],candvxydata[:,3:5]]
 		objects = [0,0,1,1,2,0,0,1,1,2]
-		if args.dataset == 'sch':
-			coords = [0,1,0,1,1,0,1,0,1,1]
-		else:
-			coords = [0,1,0,1,0,0,1,0,1,0]
+		coords = [0,1,0,1,candcoorxy,0,1,0,1,0]
 		kind = [0,0,1]
 		names = ['S2','G2','Candidate']
 		varia = [0,1,2,3,-1,-1,-1,4,4,-1]
@@ -475,9 +490,9 @@ if args.inputs == 0 or args.inputs == 2:
 	spread.extend([0.0001,0.0001,2.,2.,2.])
 guess.extend([1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
 		      9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
-		      1.e+18])
+		      0.1*pc])
 spread.extend([0.0005*pc,0.1,3.6,0.1,3.6,3.6,
-		       0.0004*pc,0.1,3.6,0.1,3.6,3.6,
+		       0.0004*pc,0.1,10.,0.1,10.,10.,
 		       0.1*pc])
 
 if not args.samerp:
@@ -573,8 +588,8 @@ if not pool.is_master():
 
 sampler = em.EnsembleSampler(nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords, varia, args.prior, 1, False], pool = pool)
 
-# Doesn't accept args, difficult to use.
-#sampler = em.PTSampler(ntemps, nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords, varia], pool = pool)
+#ntemps = 8
+#sampler = em.PTSampler(ntemps, nwalkers, ndim, obj_func, prior_func, loglargs = [times, types, measurements, errors, objects, coords, varia, args.prior, 1, False], pool = pool)
 
 pos = x0
 prob = np.array([obj_func(x, times, types, measurements, errors, objects, coords, varia, args.prior, 1, False) for x in x0])
@@ -643,27 +658,37 @@ velzdt = 0.01
 gcolors = ['b','g','y']
 lgcolors = [(0.5,0.5,0.75),(0.5,0.75,0.5),(0.75,0.75,0.5)]
 
+if args.label != '':
+	label = '.'+args.label;
+else:
+	label = ''
+
 if pool.is_master():
 	if args.dataset == 'sch':
-		f = open('sch.scores', 'a', os.O_NONBLOCK)
+		f = open('sch'+label+'.scores', 'a', os.O_NONBLOCK)
 		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
 		f.flush()
-		fname = 'pos.sch'+str(args.id)+'.out'
+		fname = 'pos.sch'+str(args.id)+label+'.out'
 	elif args.dataset == 'yel':
-		f = open('yel.scores', 'a', os.O_NONBLOCK)
+		f = open('yel'+label+'.scores', 'a', os.O_NONBLOCK)
 		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
 		f.flush()
-		fname = 'pos.yel'+str(args.id)+'.out'
+		fname = 'pos.yel'+str(args.id)+label+'.out'
 	elif args.dataset == 'lu':
-		f = open('lu.scores', 'a', os.O_NONBLOCK)
+		f = open('lu'+label+'.scores', 'a', os.O_NONBLOCK)
 		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
 		f.flush()
-		fname = 'pos.lu'+str(args.id)+'.out'
+		fname = 'pos.lu'+str(args.id)+label+'.out'
 	elif args.dataset == 'do':
-		f = open('do.scores', 'a', os.O_NONBLOCK)
+		f = open('do'+label+'.scores', 'a', os.O_NONBLOCK)
 		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
 		f.flush()
-		fname = 'pos.do'+str(args.id)+'.out'
+		fname = 'pos.do'+str(args.id)+label+'.out'
+	elif args.dataset == 'unp':
+		f = open('unp'+label+'.scores', 'a', os.O_NONBLOCK)
+		f.write(str(args.id) + ' ' + str(alltime_best_y) + ' ' + str(alltime_best_chi2) + '\n')
+		f.flush()
+		fname = 'pos.unp'+str(args.id)+label+'.out'
 	else:
 		fname = 'pos.out'
 	np.savetxt(fname, np.array([nwalkers,ndim,nsteps]))
@@ -873,15 +898,17 @@ if pool.is_master():
 	#plt.savefig('fit.png',dpi=100,bbox_inches='tight')
 	fig.set_size_inches(20.,5.)
 	if args.dataset == 'sch':
-		plt.savefig('fit.sch'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
+		plt.savefig('fit.sch'+str(args.id)+label+'.pdf',dpi=100,bbox_inches='tight')
 	elif args.dataset == 'yel':
-		plt.savefig('fit.yel'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
+		plt.savefig('fit.yel'+str(args.id)+label+'.pdf',dpi=100,bbox_inches='tight')
 	elif args.dataset == 'lu':
-		plt.savefig('fit.lu'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
+		plt.savefig('fit.lu'+str(args.id)+label+'.pdf',dpi=100,bbox_inches='tight')
 	elif args.dataset == 'do':
-		plt.savefig('fit.do'+str(args.id)+'.pdf',dpi=100,bbox_inches='tight')
+		plt.savefig('fit.do'+str(args.id)+label+'.pdf',dpi=100,bbox_inches='tight')
+	elif args.dataset == 'unp':
+		plt.savefig('fit.unp'+str(args.id)+label+'.pdf',dpi=100,bbox_inches='tight')
 	else:
-		plt.savefig('fit.pdf',dpi=100,bbox_inches='tight')
+		plt.savefig('fit'+label+'.pdf',dpi=100,bbox_inches='tight')
 	#plt.show()
 
 sys.exit()
