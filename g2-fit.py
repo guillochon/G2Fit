@@ -277,14 +277,14 @@ if args.dataset == 'sch':
 	canddata = np.loadtxt(cd+"schoedel-2009/Sch"+str(args.id)+".points")
 	candvxydata = np.loadtxt(cd+"schoedel-2009/Sch"+str(args.id)+".vxy")
 	candcoorxy = 1
-	candcoorz  = 1
+	candcoorz  = -1
 elif args.dataset == 'yel':
 	if args.id == -1:
 		args.id = 20
 	canddata = np.loadtxt(cd+"yelda-2010/Yelda"+str(args.id)+".points")
 	candvxydata = np.loadtxt(cd+"yelda-2010/Yelda"+str(args.id)+".vxy")
 	candcoorxy = 0
-	candcoorz  = 0
+	candcoorz  = -1
 elif args.dataset == 'lu':
 	if args.id == -1:
 		args.id = 1
@@ -314,9 +314,54 @@ elif args.dataset == 'unp':
 		candvdata = np.loadtxt(cd+"unpublished/S2-84.rv")
 		candcoorxy = 0
 		candcoorz  = 1
+	elif args.id == 3:
+		canddata = np.loadtxt(cd+"yelda-2010/Yelda191.points")
+		candvxydata = np.loadtxt(cd+"yelda-2010/Yelda191.vxy")
+		candvdata = np.loadtxt(cd+"unpublished/S3-223.rv")
+		candcoorxy = 0
+		candcoorz  = 1
+	elif args.id == 4:
+		canddata = np.loadtxt(cd+"yelda-2010/Yelda230.points")
+		candvxydata = np.loadtxt(cd+"yelda-2010/Yelda230.vxy")
+		candvdata = np.loadtxt(cd+"unpublished/S4-23.rv")
+		candcoorxy = 0
+		candcoorz  = 1
+	elif args.id == 5:
+		canddata = np.loadtxt(cd+"unpublished/S3-223.points")
+		candvxydata = np.loadtxt(cd+"unpublished/S3-223.vxy")
+		candvdata = np.loadtxt(cd+"unpublished/S3-223.rv")
+		candcoorxy = 1
+		candcoorz  = 1
+	elif args.id == 6:
+		canddata = np.loadtxt(cd+"unpublished/S2-84.points")
+		candvxydata = np.loadtxt(cd+"unpublished/S2-84.vxy")
+		candvdata = np.loadtxt(cd+"unpublished/S2-84.rv")
+		candcoorxy = 1
+		candcoorz  = 1
+	elif args.id == 7:
+		canddata = np.loadtxt(cd+"unpublished/S182.points")
+		candvxydata = np.loadtxt(cd+"unpublished/S182.vxy")
+		candcoorxy = 1
+		candcoorz  = -1
+	elif args.id == 8:
+		canddata = np.loadtxt(cd+"unpublished/S3-29.points")
+		candvxydata = np.loadtxt(cd+"unpublished/S3-29.vxy")
+		candvdata = np.loadtxt(cd+"unpublished/S3-29.rv")
+		candcoorxy = 1
+		candcoorz  = 1
+	elif args.id == 9:
+		canddata = np.loadtxt(cd+"unpublished/S2-198.points")
+		candvxydata = np.loadtxt(cd+"unpublished/S2-198.vxy")
+		candcoorxy = 1
+		candcoorz  = -1
+	else:
+		print "Undefined ID for dataset."
+		sys.exit(0)
 else:
 	print "Invalid dataset selected"
 	sys.exit(0)
+
+print "Fitting #" + str(args.id) + " in " + args.dataset + " dataset."
 
 # Convert data units
 s2data[:,0] = s2data[:,0]*yr
@@ -381,7 +426,7 @@ canddata[:,1:] = 2.*np.tan(canddata[:,1:]*iasec)
 candvxydata = np.reshape(candvxydata, (-1, 5))
 candvxydata[:,0] = candvxydata[:,0]*yr
 candvxydata[:,1:] = 2.*np.tan(candvxydata[:,1:]*iasec)/yr
-if args.dataset == 'lu' or args.dataset == 'do' or args.dataset == 'unp':
+if candcoorz != -1:
 	candvdata = np.reshape(candvdata, (-1, 3))
 	candvdata[:,0] = candvdata[:,0]*yr
 	candvdata[:,1] = -candvdata[:,1]
@@ -390,7 +435,7 @@ if args.dataset == 'lu' or args.dataset == 'do' or args.dataset == 'unp':
 # Both datasets
 
 if args.inputs == 0:
-	if args.dataset == 'lu' or args.dataset == 'do' or args.dataset == 'unp':
+	if candcoorz != -1:
 		times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0],candvdata[:,0]])
 		types = ['pxy','pxy','pxy','pxy','pxy','vz','vz','vz','vz','vxy','vz']
 		measurements = [s2data[:,1:3],s2data2[:,1:3],g2data[:,1:3],g2data2[:,1:3],canddata[:,1:3],s2vdata[:,1:2],s2vdata2[:,1:2],g2vdata[:,1:2],g2vdata2[:,1:2],candvxydata[:,1:3],candvdata[:,1:2]]
@@ -797,7 +842,7 @@ if pool.is_master():
 			posplt.plot(np.arctan(0.5*np.array(posx[g])*mpc/at_mhz)*asec, np.arctan(0.5*np.array(posy[g])*mpc/at_mhz)*asec, gcolors[g]+'o', markersize=4)
 			posplt.plot(np.arctan(0.5*orbpos[g][:,0]*mpc/at_mhz)*asec, np.arctan(0.5*orbpos[g][:,1]*mpc/at_mhz)*asec, gcolors[g]+'-')
 
-		if g <= 1 or args.dataset == 'lu' or args.dataset == 'do' or args.dataset == 'unp':
+		if g <= 1 or candcoorz != -1:
 			#velz = [xx for (yy,xx) in sorted(zip(vzt,velz))]
 			#vzt = [xx for (yy,xx) in sorted(zip(vzt,vzt))]
 			velzplt.plot(vzt[g], velz[g], gcolors[g]+'o', markersize=4)
