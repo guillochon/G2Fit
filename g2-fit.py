@@ -821,7 +821,6 @@ if pool.is_master():
 			psig = int(nsamp - msig)
 			velzminvec[g,t] = ensemblevels[msig,g,t,2]
 			velzmaxvec[g,t] = ensemblevels[psig,g,t,2]
-			print msig, psig, ensemblevels[msig,g,t,2], ensemblevels[psig,g,t,2]
 	print 'Done with ensemble'
 
 	mpl.rcParams.update({'font.size': 16})
