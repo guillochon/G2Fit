@@ -177,8 +177,8 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 			val += np.sum((dat[:,0]/mhz - measurements[i][:,0])**2/(errors[i][:,0]**2 + variancepxy2))
 			val += np.sum((dat[:,1]/mhz - measurements[i][:,1])**2/(errors[i][:,1]**2 + variancepxy2))
 			if mode == 1:
-				val += 0.5*np.sum(np.log(errors[i][:,0]**2 + variancepxy2))
-				val += 0.5*np.sum(np.log(errors[i][:,1]**2 + variancepxy2))
+				val += np.sum(np.log(errors[i][:,0]**2 + variancepxy2))
+				val += np.sum(np.log(errors[i][:,1]**2 + variancepxy2))
 		elif types[i] == 'vz':
 			dat = kes[gi].xyzVel(stimes)[:,2:3]
 			dat += mhvz[ci]*km
@@ -191,7 +191,7 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 
 			val += np.sum((dat - measurements[i])**2/(errors[i]**2 + variancevz2))
 			if mode == 1:
-				val += 0.5*np.sum(np.log(errors[i]**2 + variancevz2))
+				val += np.sum(np.log(errors[i]**2 + variancevz2))
 		elif types[i] == 'vxy':
 			dat = kes[gi].xyzVel(stimes)[:,0:2]
 			dat[:,0] += mhvx[ci]*km
@@ -361,8 +361,6 @@ else:
 	print "Invalid dataset selected"
 	sys.exit(0)
 
-print "Fitting #" + str(args.id) + " in " + args.dataset + " dataset."
-
 # Convert data units
 s2data[:,0] = s2data[:,0]*yr
 s2data[:,1] = -s2data[:,1] #Sign needs to be flipped according to Leo's e-mail
@@ -499,7 +497,7 @@ elif args.inputs == 2:
 	varia = [0,1,-1,2,3,-1]
 
 zerot = min(list(flatten(times)))
-datalen = len(list(flatten(times)))
+datalen = len(list(flatten(measurements)))
 for i in xrange(len(types)):
 	times[i] = times[i] - zerot
 
@@ -630,6 +628,8 @@ pool = MPIPool()
 if not pool.is_master():
 	pool.wait()
 	sys.exit(0)
+else:
+	print "Fitting #" + str(args.id) + " in " + args.dataset + " dataset."
 
 sampler = em.EnsembleSampler(nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords, varia, args.prior, 1, False], pool = pool)
 
@@ -645,6 +645,10 @@ alltime_best_chi2 = float("inf")
 alltime_best_pos = x0[0]
 for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=False, lnprob0=prob, rstate0=state)):
 	print t
+	if os.path.isfile("stop"):
+		nsteps = t
+		break
+
 	pos, prob, state = result
 
 	temp = temp*(1.0/t0)**(1.0/nburn)
