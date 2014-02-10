@@ -68,7 +68,7 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 	global vecs, vecs2, temp, elements, variances, kes
 	lmh =  x[0]
 	mhz =  x[1]
-	variances = x[2:nvaria+2]
+	variances = np.abs(x[2:nvaria+2])
 
 	mhx =  x[nvaria+2:5*ncoords+nvaria+2:5]
 	mhy =  x[nvaria+3:5*ncoords+nvaria+2:5]
@@ -79,17 +79,24 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 
 	if nobjects >= 3:
 		# Hacky, third object has restricted parameters depending on object 2.
+		if not args.samew:
+			if args.noproprec:
+				# Retrograde precession only, GR won't be important
+				if elements[2][1] > 0.: return float("-inf")
+			if args.preclim > 0.:
+				if np.abs(elements[2][1] - elements[1][4]) > args.preclim: return float("-inf")
+
 		if args.samerp:
 			if args.samew:
-				elements[2] = [elements[2][0],0.,0.,0.,0.,0.]
+				elements[2] = [elements[2][0],0.,0.,0.,elements[1][4],0.]
 			else:
-				elements[2] = [elements[2][0],0.,0.,0.,elements[2][1],0.]
+				elements[2] = [elements[2][0],0.,0.,0.,elements[1][4]+elements[2][1],0.]
 		else:
 			if args.samew:
-				elements[2] = [elements[2][0],elements[2][1],0.,0.,0.,0.]
+				elements[2] = [elements[2][0],elements[2][1],0.,0.,elements[1][4],0.]
 			else:
 				# For floating w
-				elements[2] = [elements[2][0],elements[2][1],0.,0.,elements[2][2],0.]
+				elements[2] = [elements[2][0],elements[2][1],0.,0.,elements[1][4]+elements[2][2],0.]
 
 	mh = 10.**lmh
 
@@ -112,28 +119,20 @@ def obj_func(x, times, types, measurements, errors, objects, coords, varia, prio
 		#elements[2][3] = elements[1][3]*period1/period2
 		elements[2][3] = np.mod(g2reftime - np.mod(g2reftime - elements[1][3]*period1, period1), period2)/period2
 		#elements[2][3] = (1. - (1.-elements[1][3])*period1/period2)
-		if args.samew:
-			elements[2][4] = elements[1][4]
-		else:
-			if args.noproprec:
-				# Retrograde precession only, GR won't be important
-				if elements[2][4] > elements[1][4]: return float("-inf")
-			if args.preclim > 0.:
-				if np.abs(elements[2][4] - elements[1][4]) > args.preclim: return float("-inf")
 		elements[2][5] = elements[1][5]
 
 	kes = get_star_ke(elements, lmh)
 
 	# All globals except vecs/vecs2 should be calculated before premature returns
-	if min(variances) < 0: return float("-inf")
+	#if min(variances) < 0: return float("-inf")
 
 	for i, e in enumerate(elements):
 		if e[0] < 1.e13 or e[0] > 1.e20: return float("-inf")
 		if e[1] > 0.: return float("-inf")
-		if e[2] > 360. or e[2] < 0.: return float("-inf")
+		#if e[2] > 360. or e[2] < 0.: return float("-inf")
 		if e[3] < 0. or e[3] > 1.: return float("-inf")
-		if e[4] > 360. or e[4] < 0.: return float("-inf")
-		if e[5] > 360. or e[5] < 0.: return float("-inf")
+		#if e[4] > 360. or e[4] < 0.: return float("-inf")
+		#if e[5] > 360. or e[5] < 0.: return float("-inf")
 
 	# Skip obj func calculation in this mode
 	if mode == 2:
@@ -232,7 +231,7 @@ if args.nsteps == -1:
 else:
 	nsteps = args.nsteps
 nburn = nsteps/2
-t0 = 1.e4
+t0 = 1.e5
 
 # Constants and units
 pq.set_default_units('cgs')
@@ -432,6 +431,7 @@ if candcoorz != -1:
 
 # Both datasets
 
+
 if args.inputs == 0:
 	if candcoorz != -1:
 		times = np.array([s2data[:,0],s2data2[:,0],g2data[:,0],g2data2[:,0],canddata[:,0],s2vdata[:,0],s2vdata2[:,0],g2vdata[:,0],g2vdata2[:,0],candvxydata[:,0],candvdata[:,0]])
@@ -509,6 +509,7 @@ nvaria = len(set(varia)) - 1 #Need -1 because some have no variance
 
 guess = [39.9584143435, 2.59384025953e+22]
 spread = [0.1,0.1*kpc]
+vtype = [0,0]
 
 # Currently, varia must be numbered in sequential order (e.g. 1,2,2,3,3,4).
 varcnt = -1
@@ -518,9 +519,11 @@ for i in xrange(len(types)):
 		if types[i] == 'pxy':
 			guess.append(1.e-7)
 			spread.append(1.e-8)
+			vtype.append(3)
 		elif types[i] == 'vz':
 			guess.append(100.)
 			spread.append(10.)
+			vtype.append(3)
 		else:
 			print "Illegal varia type"
 			sys.exit(0)
@@ -528,23 +531,30 @@ for i in xrange(len(types)):
 if args.inputs == 0 or args.inputs == 1:
 	guess.extend([0.00410019037373, -0.0118283833404, -5.88758979397, 33.8514299745, 5.04693439458])
 	spread.extend([0.0001,0.0001,2.,2.,2.])
+	vtype.extend([0,0,0,0,0])
 if args.inputs == 0 or args.inputs == 2:
 	guess.extend([0.00188458402115, -0.000820145144759, 6.27616992363, 4.46443106758, -4.56136189986])
 	spread.extend([0.0001,0.0001,2.,2.,2.])
+	vtype.extend([0,0,0,0,0])
 guess.extend([1.56756036064e+16, -0.940279303786, 42.8722842131, 0.637093635944, 245.708554749, 44.6488697179,
 		      9.33954553832e+16, -1.27583250582, 183.295010867, 0.0931688837147, 283.490710366, 70.4401624252,
 		      0.1*pc])
 spread.extend([0.0005*pc,0.1,3.6,0.1,3.6,3.6,
 		       0.0004*pc,0.1,10.,0.1,10.,10.,
 		       0.1*pc])
+vtype.extend([0,0,1,2,1,1,
+			 0,0,1,2,1,1,
+			 0])
 
 if not args.samerp:
 	guess.append(-2.)
 	spread.append(1.)
+	vtype.append(0)
 
 if not args.samew:
-	guess.append(283.490710366)
+	guess.append(-36.)
 	spread.append(36.)
+	vtype.append(0)
 
 x0 = em.utils.sample_ball(guess, spread, size=nwalkers)
 #x0 = em.utils.sample_ball([39.9584143435, 2.59384025953e+22,
@@ -631,7 +641,7 @@ if not pool.is_master():
 else:
 	print "Fitting #" + str(args.id) + " in " + args.dataset + " dataset."
 
-sampler = em.EnsembleSampler(nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords, varia, args.prior, 1, False], pool = pool)
+sampler = em.tEnsembleSampler(nwalkers, ndim, obj_func, args = [times, types, measurements, errors, objects, coords, varia, args.prior, 1, False], pool = pool)
 
 #ntemps = 8
 #sampler = em.PTSampler(ntemps, nwalkers, ndim, obj_func, prior_func, loglargs = [times, types, measurements, errors, objects, coords, varia, args.prior, 1, False], pool = pool)
@@ -643,7 +653,7 @@ state = sampler.random_state
 alltime_best_y = float("inf")
 alltime_best_chi2 = float("inf")
 alltime_best_pos = x0[0]
-for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=False, lnprob0=prob, rstate0=state)):
+for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=False, lnprob0=prob, rstate0=state, temp=temp)):
 	print t
 	if os.path.isfile("stop"):
 		nsteps = t
@@ -651,7 +661,17 @@ for t, result in enumerate(sampler.sample(pos, iterations=nsteps, storechain=Fal
 
 	pos, prob, state = result
 
-	temp = temp*(1.0/t0)**(1.0/nburn)
+	# Sanitize out of range walkers
+	for p, lpos in enumerate(pos):
+		for y, typ in enumerate(vtype):
+			if (typ == 1):
+				pos[p,y] = np.mod(pos[p,y], 360.)
+			#elif (typ == 2):
+			#	pos[p,y] = np.mod(pos[p,y], 1.)
+			elif (typ == 3):
+				pos[p,y] = np.abs(pos[p,y])
+
+	temp = max(temp*(1.0/t0)**(1.0/nburn), 1.)
 
 	best_probi = prob.argmax()
 	best_y = -prob[best_probi]
